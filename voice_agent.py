@@ -1,0 +1,181 @@
+"""
+Voice AI Agent
+==============
+Speak to Claude, get spoken responses back.
+Uses:
+  - SpeechRecognition  (mic → text)
+  - pyttsx3            (text → speech, offline, no API key)
+  - anthropic          (Claude API)
+
+Install:
+    pip install anthropic speechrecognition pyttsx3 pyaudio
+
+On macOS you may need:  brew install portaudio
+On Linux:               sudo apt install portaudio19-dev python3-pyaudio espeak
+"""
+
+import anthropic
+import speech_recognition as sr
+import pyttsx3
+import sys
+
+# ─── Configuration ────────────────────────────────────────────────────────────
+
+AGENT_INSTRUCTIONS = """
+You are an EBT application assistant helping clients apply for food assistance benefits.
+Keep every reply under 3 sentences — responses will be spoken aloud.
+Never use bullet points, markdown, or special characters.
+Speak naturally, like a conversation.
+Do not ask for or repeat back sensitive personal information such as Social Security numbers, bank account details, or passwords.
+"""
+
+# Optional: swap for "nova", "alloy", etc. if you use OpenAI TTS instead
+SPEECH_RATE   = 175   # words per minute (pyttsx3)
+SPEECH_VOLUME = 1.0   # 0.0 – 1.0
+
+# ─── Setup ────────────────────────────────────────────────────────────────────
+
+client     = anthropic.Anthropic()   # reads ANTHROPIC_API_KEY from env
+recognizer = sr.Recognizer()
+engine     = pyttsx3.init()
+
+engine.setProperty("rate",   SPEECH_RATE)
+engine.setProperty("volume", SPEECH_VOLUME)
+
+conversation_history = []
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def speak(text: str) -> None:
+    """Convert text to speech and play it."""
+    print(f"\n🤖 Agent: {text}\n")
+    engine.say(text)
+    engine.runAndWait()
+
+
+def listen(timeout: int = 8, phrase_limit: int = 15) -> str | None:
+    """
+    Record from the default microphone and return transcribed text.
+    Returns None if nothing was heard or recognition failed.
+    """
+    with sr.Microphone() as source:
+        print("🎙  Listening…  (speak now)")
+        recognizer.adjust_for_ambient_noise(source, duration=0.5)
+        try:
+            audio = recognizer.listen(
+                source,
+                timeout=timeout,
+                phrase_time_limit=phrase_limit,
+            )
+        except sr.WaitTimeoutError:
+            print("   (no speech detected, try again)")
+            return None
+
+    print("   (processing…)")
+    try:
+        text = recognizer.recognize_google(audio)
+        print(f"👤 You: {text}")
+        return text
+    except sr.UnknownValueError:
+        print("   (could not understand audio)")
+        return None
+    except sr.RequestError as e:
+        print(f"   (Google Speech API error: {e})")
+        return None
+
+
+def chat(user_text: str) -> str:
+    """Send user_text to Claude and return the assistant reply."""
+    conversation_history.append({"role": "user", "content": user_text})
+
+    response = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=512,
+        system=AGENT_INSTRUCTIONS.strip(),
+        messages=conversation_history,
+    )
+
+    reply = response.content[0].text.strip()
+    conversation_history.append({"role": "assistant", "content": reply})
+    return reply
+
+
+def update_instructions(new_instructions: str) -> None:
+    """
+    Hot-swap the agent's instructions at runtime.
+    Clears conversation history so the new persona starts fresh.
+    """
+    global AGENT_INSTRUCTIONS
+    AGENT_INSTRUCTIONS = new_instructions
+    conversation_history.clear()
+    print("\n✅ Instructions updated. Conversation reset.\n")
+
+
+# ─── Main loop ────────────────────────────────────────────────────────────────
+
+def run():
+    print("=" * 55)
+    print("  Voice AI Agent  —  powered by Claude")
+    print("=" * 55)
+    print("  Say 'quit' or 'exit' to stop.")
+    print("  Say 'change instructions' to update the agent.")
+    print("  Current instructions:")
+    print(AGENT_INSTRUCTIONS.strip())
+    print("=" * 55)
+
+    speak(
+        "Hello! I'm your EBT application assistant, here to help you apply for food assistance benefits. "
+        "Please do not share sensitive personal information such as Social Security numbers, "
+        "bank account details, or passwords during our conversation. "
+        "How can I help you today?"
+    )
+
+    while True:
+        user_input = listen()
+
+        if user_input is None:
+            continue
+
+        lower = user_input.lower().strip()
+
+        # ── Exit commands ──────────────────────────────────────────────────
+        if any(lower.startswith(w) for w in ("quit", "exit", "stop", "goodbye")):
+            speak("Goodbye! Have a great day.")
+            sys.exit(0)
+
+        # ── Update instructions at runtime ─────────────────────────────────
+        if "change instructions" in lower or "update instructions" in lower:
+            speak("Sure. Please type your new instructions in the terminal.")
+            print("\nEnter new instructions (blank line to finish):\n")
+            lines = []
+            while True:
+                line = input()
+                if line == "":
+                    break
+                lines.append(line)
+            if lines:
+                update_instructions("\n".join(lines))
+                speak("Got it. Instructions updated. Let's continue.")
+            else:
+                speak("No changes made.")
+            continue
+
+        # ── Normal conversation ────────────────────────────────────────────
+        try:
+            reply = chat(user_input)
+            speak(reply)
+        except anthropic.APIError as e:
+            print(f"   (API error: {e})")
+            speak("Sorry, I had trouble reaching the AI. Please try again.")
+
+
+# ─── Entry point ──────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    # Optional: accept instructions as a CLI argument
+    # Usage: python voice_agent.py "You are a pirate assistant."
+    if len(sys.argv) > 1:
+        update_instructions(" ".join(sys.argv[1:]))
+
+    run()
