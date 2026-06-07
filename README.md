@@ -1,4 +1,4 @@
-The voice AI agent is an EBT application assistant that helps you get your EBT documents in order. It listens on your microphone and replies out loud, powered by Groq's free LLM API.
+The voice AI agent is an EBT application assistant that helps you get your EBT documents in order. It listens on your microphone and replies out loud, powered by Groq's free LLM API. The front-end is built using streamlit and you can try it here https://tinyurl.com/ebtassistant
 
 ## Setup
 
