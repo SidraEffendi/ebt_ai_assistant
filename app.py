@@ -137,6 +137,8 @@ HTML_PAGE = """<!doctype html>
     const form = document.getElementById("chat-form");
     const promptInput = document.getElementById("prompt");
     const resetButton = document.getElementById("reset");
+    let conversationVersion = 0;
+    let activeChatRequest = null;
 
     function addMessage(role, text) {{
       const node = document.createElement("div");
@@ -153,6 +155,7 @@ HTML_PAGE = """<!doctype html>
 
       addMessage("user", prompt);
       promptInput.value = "";
+      const requestVersion = conversationVersion;
 
       const pending = document.createElement("div");
       pending.className = "message assistant";
@@ -161,21 +164,34 @@ HTML_PAGE = """<!doctype html>
       messages.scrollTop = messages.scrollHeight;
 
       try {{
+        activeChatRequest = new AbortController();
         const response = await fetch("/chat", {{
           method: "POST",
           headers: {{ "content-type": "application/json" }},
+          signal: activeChatRequest.signal,
           body: JSON.stringify({{ prompt }}),
         }});
         const data = await response.json();
+        if (requestVersion !== conversationVersion) return;
         pending.textContent = data.reply || data.error || "Sorry, something went wrong.";
       }} catch (error) {{
+        if (requestVersion !== conversationVersion || error.name === "AbortError") return;
         pending.textContent = "Sorry, I had trouble reaching the assistant.";
+      }} finally {{
+        if (requestVersion === conversationVersion) {{
+          activeChatRequest = null;
+        }}
       }}
     }});
 
     resetButton.addEventListener("click", async () => {{
+      conversationVersion += 1;
+      if (activeChatRequest) {{
+        activeChatRequest.abort();
+        activeChatRequest = null;
+      }}
       await fetch("/reset", {{ method: "POST" }});
-      messages.innerHTML = "";
+      messages.replaceChildren();
       addMessage("assistant", {welcome_json});
     }});
   </script>

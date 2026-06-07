@@ -1,13 +1,12 @@
 import hashlib
-import json
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from voice_agent import (
     chat,
     extract_checklist_updates,
     reset_conversation,
+    synthesize_speech,
     transcribe_audio_bytes,
 )
 
@@ -145,41 +144,11 @@ def checklist_context() -> str:
     )
 
 
-def speak_in_browser(text: str) -> None:
-    """
-    Speak assistant reply in the browser using the Web Speech API.
-
-    This is better than calling pyttsx3 from Streamlit because pyttsx3
-    speaks on the server machine, not necessarily in the user's browser.
-    """
-    safe_text = json.dumps(text)
-
-    components.html(
-        f"""
-        <script>
-        const text = {safe_text};
-
-        function speakText() {{
-            const synth = window.speechSynthesis;
-            if (!synth) {{
-                return;
-            }}
-
-            synth.cancel();
-
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.95;
-            utterance.pitch = 1.0;
-            utterance.volume = 1.0;
-
-            synth.speak(utterance);
-        }}
-
-        speakText();
-        </script>
-        """,
-        height=0,
-    )
+def render_spoken_response(text: str) -> None:
+    """Generate and render language-aware speech audio for an assistant reply."""
+    audio_bytes = synthesize_speech(text)
+    if audio_bytes:
+        st.audio(audio_bytes, format="audio/mp3", autoplay=True)
 
 
 def render_sidebar() -> None:
@@ -287,7 +256,7 @@ def handle_user_prompt(prompt: str) -> None:
             )
 
             if st.session_state.auto_read_responses:
-                speak_in_browser(assistant_reply)
+                render_spoken_response(assistant_reply)
 
         except RuntimeError as e:
             error_message = str(e)

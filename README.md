@@ -1,4 +1,4 @@
-The voice AI agent is an EBT application assistant that helps you get your EBT documents in order. It listens on your microphone, transcribes speech with Groq Whisper, and replies out loud, powered by Groq's API.
+The voice AI agent is an EBT application assistant that helps you get your EBT documents in order. It listens on your microphone, transcribes speech with Groq Whisper, and replies out loud with language-aware Edge TTS voices.
 
 ## Setup
 
@@ -27,4 +27,5 @@ Do not run `python app.py`.
 Run the Streamlit frontend with:
 
 ```bash
-python -m streamlit run app.py
+python -m streamlit run streamlit_app.py
+```

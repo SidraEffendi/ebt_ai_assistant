@@ -21,11 +21,26 @@ On Linux:               sudo apt install portaudio19-dev python3-pyaudio espeak
 import json
 import os
 import sys
+import asyncio
 
 import groq
 from groq import Groq
 from dotenv import load_dotenv
 import speech_recognition as sr
+
+try:
+    import edge_tts
+    _EDGE_TTS_AVAILABLE = True
+except ImportError:
+    _EDGE_TTS_AVAILABLE = False
+
+try:
+    from langdetect import DetectorFactory, LangDetectException, detect
+    DetectorFactory.seed = 0
+    _LANGDETECT_AVAILABLE = True
+except ImportError:
+    LangDetectException = Exception
+    _LANGDETECT_AVAILABLE = False
 
 try:
     import pyttsx3
@@ -55,6 +70,26 @@ SPEECH_RATE   = 175   # words per minute (pyttsx3)
 SPEECH_VOLUME = 1.0   # 0.0 – 1.0
 
 # ─── Setup ────────────────────────────────────────────────────────────────────
+
+DEFAULT_TTS_LANGUAGE = "en"
+DEFAULT_TTS_VOICE = "en-US-JennyNeural"
+TTS_VOICES_BY_LANGUAGE = {
+    "ar": "ar-SA-ZariyahNeural",
+    "de": "de-DE-KatjaNeural",
+    "en": DEFAULT_TTS_VOICE,
+    "es": "es-MX-DaliaNeural",
+    "fr": "fr-FR-DeniseNeural",
+    "hi": "hi-IN-SwaraNeural",
+    "it": "it-IT-ElsaNeural",
+    "ja": "ja-JP-NanamiNeural",
+    "ko": "ko-KR-SunHiNeural",
+    "nl": "nl-NL-ColetteNeural",
+    "pl": "pl-PL-ZofiaNeural",
+    "pt": "pt-BR-FranciscaNeural",
+    "ru": "ru-RU-SvetlanaNeural",
+    "zh-cn": "zh-CN-XiaoxiaoNeural",
+    "zh-tw": "zh-TW-HsiaoChenNeural",
+}
 
 client = None
 recognizer = sr.Recognizer()
@@ -101,6 +136,74 @@ def reset_conversation() -> None:
     conversation_history.clear()
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def detect_tts_language(text: str) -> str:
+    """Detect the best-effort language code to use for speech synthesis."""
+    if not _LANGDETECT_AVAILABLE or not text.strip():
+        return DEFAULT_TTS_LANGUAGE
+
+    try:
+        language = detect(text)
+    except LangDetectException:
+        return DEFAULT_TTS_LANGUAGE
+    except Exception as e:
+        print(f"Language detection error: {e}")
+        return DEFAULT_TTS_LANGUAGE
+
+    return language.lower()
+
+
+def choose_tts_voice(language: str) -> str:
+    """Choose an Edge TTS voice for a detected language code."""
+    normalized = language.lower()
+
+    if normalized in TTS_VOICES_BY_LANGUAGE:
+        return TTS_VOICES_BY_LANGUAGE[normalized]
+
+    base_language = normalized.split("-")[0]
+    return TTS_VOICES_BY_LANGUAGE.get(base_language, DEFAULT_TTS_VOICE)
+
+
+async def synthesize_speech_async(text: str) -> bytes | None:
+    """Generate MP3 speech audio with Edge TTS, returning None on safe failure."""
+    if not _EDGE_TTS_AVAILABLE:
+        return None
+
+    clean_text = text.strip()
+    if not clean_text:
+        return None
+
+    language = detect_tts_language(clean_text)
+    voice = choose_tts_voice(language)
+
+    try:
+        communicate = edge_tts.Communicate(clean_text, voice)
+        audio_chunks = []
+
+        async for chunk in communicate.stream():
+            if chunk.get("type") == "audio":
+                audio_chunks.append(chunk.get("data", b""))
+
+        return b"".join(audio_chunks) or None
+
+    except Exception as e:
+        print(f"Edge TTS synthesis error: {e}")
+        return None
+
+
+def synthesize_speech(text: str) -> bytes | None:
+    """Generate MP3 speech audio with Edge TTS from synchronous callers."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        try:
+            return asyncio.run(synthesize_speech_async(text))
+        except Exception as e:
+            print(f"Text-to-speech error: {e}")
+            return None
+    else:
+        print("Text-to-speech skipped because an async event loop is already running.")
+        return None
 
 def speak(text: str) -> None:
     """Convert text to speech and play it (CLI only; not used by the web app)."""
