@@ -1,5 +1,3 @@
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
 const DEFAULT_INSTRUCTIONS = `
 You are an EBT application assistant helping clients apply for food assistance benefits.
 Keep every reply under 3 sentences because responses may be spoken aloud.
@@ -26,9 +24,9 @@ const saveInstructionsButton = document.querySelector("#saveInstructionsButton")
 const resetInstructionsButton = document.querySelector("#resetInstructionsButton");
 
 const messages = [];
-let recognition;
+let mediaRecorder;
+let audioChunks = [];
 let isRecording = false;
-let pendingTranscript = "";
 let hasGreeted = false;
 let awaitingInstructionText = false;
 let agentInstructions = localStorage.getItem("agentInstructions") || DEFAULT_INSTRUCTIONS.trim();
@@ -181,58 +179,93 @@ async function sendToAgent(userText) {
   }
 }
 
-function setupSpeechRecognition() {
-  if (!SpeechRecognition) {
-    listenButton.disabled = true;
-    appendMessage("system", "This browser does not support voice input. Use Chrome or Edge for voice mode.");
-    return;
-  }
-
-  recognition = new SpeechRecognition();
-  recognition.lang = "en-US";
-  recognition.interimResults = true;
-  recognition.continuous = false;
-
-  recognition.onstart = () => {
-    pendingTranscript = "";
-    setRecording(true);
-    setStatus("Listening");
-  };
-
-  recognition.onresult = (event) => {
-    pendingTranscript = Array.from(event.results)
-      .map((result) => result[0].transcript)
-      .join(" ");
-  };
-
-  recognition.onerror = (event) => {
-    setRecording(false);
-    setStatus("Ready");
-    appendMessage("system", event.error === "not-allowed" ? "Browser audio permission was denied." : "Voice input stopped.");
-  };
-
-  recognition.onend = () => {
-    const transcript = pendingTranscript.trim();
-    setRecording(false);
-    setStatus("Ready");
-    if (transcript) sendToAgent(transcript);
-  };
+function supportedMimeType() {
+  const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+  return types.find((type) => MediaRecorder.isTypeSupported(type)) || "";
 }
 
-listenButton.addEventListener("click", () => {
+async function startRecording() {
   greetOnce();
 
-  if (!recognition) return;
-
-  if (isRecording) {
-    recognition.stop();
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    appendMessage("system", "This browser does not support audio recording. You can still type messages.");
     return;
   }
 
   try {
-    recognition.start();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = supportedMimeType();
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach((track) => track.stop());
+      setRecording(false);
+      await transcribeRecording(mimeType || mediaRecorder.mimeType || "audio/webm");
+    };
+
+    mediaRecorder.start();
+    setRecording(true);
+    setStatus("Listening");
   } catch (error) {
     setRecording(false);
+    setStatus("Ready");
+    appendMessage("system", "Browser audio permission was denied or unavailable.");
+  }
+}
+
+function stopRecording() {
+  if (!mediaRecorder || mediaRecorder.state === "inactive") return;
+  setStatus("Transcribing");
+  mediaRecorder.stop();
+}
+
+async function transcribeRecording(mimeType) {
+  const audioBlob = new Blob(audioChunks, { type: mimeType });
+  audioChunks = [];
+
+  if (!audioBlob.size) {
+    appendMessage("system", "No audio was captured.");
+    setStatus("Ready");
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": audioBlob.type || "audio/webm" },
+      body: audioBlob,
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Transcription failed.");
+    }
+
+    if (!data.text) {
+      appendMessage("system", "I could not understand the audio.");
+      setStatus("Ready");
+      return;
+    }
+
+    await sendToAgent(data.text);
+  } catch (error) {
+    appendMessage("system", error.message || "Unable to transcribe audio.");
+    setStatus("Ready");
+  }
+}
+
+listenButton.addEventListener("click", () => {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
   }
 });
 
@@ -257,7 +290,6 @@ resetInstructionsButton.addEventListener("click", () => {
 });
 
 instructionsInput.value = agentInstructions;
-setupSpeechRecognition();
 renderEmptyState();
 setRecording(false);
 setStatus("Ready");

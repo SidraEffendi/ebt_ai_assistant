@@ -6,6 +6,10 @@
       "use": "@vercel/node"
     },
     {
+      "src": "api/transcribe.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "index.html",
       "use": "@vercel/static"
     },
@@ -22,6 +26,10 @@
     {
       "src": "/api/chat",
       "dest": "/api/chat.js"
+    },
+    {
+      "src": "/api/transcribe",
+      "dest": "/api/transcribe.js"
     },
     {
       "src": "/script.js",

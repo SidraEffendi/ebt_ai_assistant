@@ -5,8 +5,9 @@ The voice AI agent is an EBT application assistant that helps you get your EBT d
 This repo includes a minimal Vercel-ready browser UI:
 
 - `index.html`, `styles.css`, and `script.js` run the browser voice experience.
+- `api/transcribe.js` transcribes recorded browser audio with Groq Whisper.
 - `api/chat.js` calls Groq with the current conversation and agent instructions.
-- The UI shows `Recording` while browser voice recognition is active.
+- The UI shows `Recording` while browser audio recording is active.
 - Voice inputs and assistant responses are logged in a scrollable chat window.
 - Saying `quit`, `exit`, `stop`, or `goodbye` ends the conversation with a farewell.
 - Saying `change instructions` or `update instructions` lets you replace the agent instructions and resets the conversation.
