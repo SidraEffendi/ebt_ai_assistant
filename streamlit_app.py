@@ -1,148 +1,27 @@
-import hashlib
+﻿import hashlib
 
 import streamlit as st
+
+from localization import (
+    CHECKLIST_ITEMS,
+    DEFAULT_LANGUAGE,
+    UI_TEXT_BY_LANGUAGE,
+    checklist_label as localized_checklist_label,
+    get_welcome_message,
+    suggested_questions as localized_suggested_questions,
+    ui_language,
+    ui_text as localized_ui_text,
+)
 
 from voice_agent import (
     chat,
     detect_tts_language,
     extract_checklist_updates,
-    get_welcome_message,
     normalize_tts_language,
     reset_conversation,
     synthesize_speech,
     transcribe_audio_bytes,
 )
-
-
-DEFAULT_LANGUAGE = "en"
-
-UI_TEXT_BY_LANGUAGE = {
-    "en": {
-        "page_title": "EBT AI Assistant",
-        "page_caption": (
-            "A voice-first assistant to help applicants understand and organize EBT documents."
-        ),
-        "privacy_notice": (
-            "Please do not enter Social Security numbers, bank account numbers, passwords, "
-            "or other highly sensitive personal information."
-        ),
-        "sidebar_title": "Document checklist",
-        "sidebar_help": "Use this as a simple guide while preparing your application.",
-        "reset_button": "Reset conversation",
-        "voice_settings": "Voice settings",
-        "auto_read": "Read assistant replies aloud",
-        "readiness": "Readiness",
-        "readiness_help": "Check off documents as you collect them.",
-        "voice_input_title": "Speak to the assistant",
-        "record_question": "Record your question",
-        "transcribing": "Transcribing your voice...",
-        "you_said": "You said: {transcript}",
-        "transcription_failed": (
-            "I could not understand the recording. Please try again or type your question."
-        ),
-        "try_asking": "Try asking:",
-        "chat_input": "Or type your question here",
-        "thinking": "Thinking...",
-        "service_error": (
-            "Sorry, I had trouble reaching the AI service. "
-            "Please check your API key and try again."
-        ),
-    },
-    "es": {
-        "page_title": "Asistente de EBT",
-        "page_caption": (
-            "Un asistente de voz para ayudar a los solicitantes a entender y organizar documentos de EBT."
-        ),
-        "privacy_notice": (
-            "Por favor no ingrese números de Seguro Social, números de cuentas bancarias, "
-            "contraseñas u otra información muy sensible."
-        ),
-        "sidebar_title": "Lista de documentos",
-        "sidebar_help": "Use esta guía sencilla mientras prepara su solicitud.",
-        "reset_button": "Reiniciar conversación",
-        "voice_settings": "Configuración de voz",
-        "auto_read": "Leer respuestas en voz alta",
-        "readiness": "Preparación",
-        "readiness_help": "Marque los documentos a medida que los reúna.",
-        "voice_input_title": "Hable con el asistente",
-        "record_question": "Grabe su pregunta",
-        "transcribing": "Transcribiendo su voz...",
-        "you_said": "Usted dijo: {transcript}",
-        "transcription_failed": (
-            "No pude entender la grabación. Inténtelo de nuevo o escriba su pregunta."
-        ),
-        "try_asking": "Pruebe preguntar:",
-        "chat_input": "O escriba su pregunta aquí",
-        "thinking": "Pensando...",
-        "service_error": (
-            "Lo siento, tuve problemas para comunicarme con el servicio de IA. "
-            "Revise su clave de API e inténtelo de nuevo."
-        ),
-    },
-}
-
-SUGGESTED_QUESTIONS = [
-    "What documents do I need for an EBT application?",
-    "What can I use as proof of income?",
-    "What can I use as proof of address?",
-    "How should I organize my documents before applying?",
-]
-
-SUGGESTED_QUESTIONS_BY_LANGUAGE = {
-    "en": SUGGESTED_QUESTIONS,
-    "es": [
-        "¿Qué documentos necesito para una solicitud de EBT?",
-        "¿Qué puedo usar como prueba de ingresos?",
-        "¿Qué puedo usar como prueba de domicilio?",
-        "¿Cómo debo organizar mis documentos antes de solicitar?",
-    ],
-}
-
-CHECKLIST_ITEMS = [
-    {
-        "id": "photo_id",
-        "label": "Photo ID",
-    },
-    {
-        "id": "proof_of_address",
-        "label": "Proof of address",
-    },
-    {
-        "id": "proof_of_income",
-        "label": "Proof of income",
-    },
-    {
-        "id": "rent_or_mortgage",
-        "label": "Rent or mortgage document",
-    },
-    {
-        "id": "utility_bill",
-        "label": "Utility bill",
-    },
-    {
-        "id": "household_info",
-        "label": "Household member information",
-    },
-    {
-        "id": "medical_childcare_expenses",
-        "label": "Medical or childcare expense documents, if applicable",
-    },
-]
-
-CHECKLIST_LABELS_BY_LANGUAGE = {
-    "en": {item["id"]: item["label"] for item in CHECKLIST_ITEMS},
-    "es": {
-        "photo_id": "Identificación con foto",
-        "proof_of_address": "Prueba de domicilio",
-        "proof_of_income": "Prueba de ingresos",
-        "rent_or_mortgage": "Documento de renta o hipoteca",
-        "utility_bill": "Factura de servicios públicos",
-        "household_info": "Información de los miembros del hogar",
-        "medical_childcare_expenses": (
-            "Documentos de gastos médicos o de cuidado infantil, si corresponde"
-        ),
-    },
-}
 
 
 def initialize_state() -> None:
@@ -167,6 +46,9 @@ def initialize_state() -> None:
     if "welcome_audio_played" not in st.session_state:
         st.session_state.welcome_audio_played = False
 
+    if "reset_generation" not in st.session_state:
+        st.session_state.reset_generation = 0
+
     if "checklist" not in st.session_state:
         st.session_state.checklist = {
             item["id"]: False for item in CHECKLIST_ITEMS
@@ -180,13 +62,17 @@ def initialize_state() -> None:
 
 def reset_app() -> None:
     """Reset both frontend and backend conversation state."""
+    current_language = normalize_tts_language(st.session_state.current_language)
+
     reset_conversation()
+    st.session_state.current_language = current_language
     st.session_state.messages = [
-        welcome_message(st.session_state.current_language)
+        welcome_message(current_language)
     ]
     st.session_state.pending_prompt = None
     st.session_state.last_audio_hash = None
     st.session_state.welcome_audio_played = False
+    st.session_state.reset_generation += 1
     st.session_state.checklist = {
         item["id"]: False for item in CHECKLIST_ITEMS
     }
@@ -200,37 +86,23 @@ def checklist_widget_key(item_id: str) -> str:
 
 
 def current_ui_language() -> str:
-    """Return the supported UI language, using English as the deterministic fallback."""
-    language = normalize_tts_language(st.session_state.current_language)
-    if language in UI_TEXT_BY_LANGUAGE:
-        return language
-    return DEFAULT_LANGUAGE
+    """Return the current UI language for this session."""
+    return ui_language(st.session_state.current_language)
 
 
 def ui_text(key: str) -> str:
-    """Return localized UI text with English fallback."""
-    language = current_ui_language()
-    return UI_TEXT_BY_LANGUAGE.get(language, UI_TEXT_BY_LANGUAGE[DEFAULT_LANGUAGE]).get(
-        key,
-        UI_TEXT_BY_LANGUAGE[DEFAULT_LANGUAGE][key],
-    )
+    """Return localized UI text for this session."""
+    return localized_ui_text(st.session_state.current_language, key)
 
 
 def suggested_questions() -> list[str]:
-    """Return localized suggested prompts with English fallback."""
-    return SUGGESTED_QUESTIONS_BY_LANGUAGE.get(
-        current_ui_language(),
-        SUGGESTED_QUESTIONS_BY_LANGUAGE[DEFAULT_LANGUAGE],
-    )
+    """Return localized suggested prompts for this session."""
+    return localized_suggested_questions(st.session_state.current_language)
 
 
 def checklist_label(item_id: str) -> str:
-    """Return a localized checklist label with English fallback."""
-    language = current_ui_language()
-    return CHECKLIST_LABELS_BY_LANGUAGE.get(
-        language,
-        CHECKLIST_LABELS_BY_LANGUAGE[DEFAULT_LANGUAGE],
-    ).get(item_id, CHECKLIST_LABELS_BY_LANGUAGE[DEFAULT_LANGUAGE][item_id])
+    """Return a localized checklist label for this session."""
+    return localized_checklist_label(st.session_state.current_language, item_id)
 
 
 def welcome_message(language: str) -> dict[str, str | bool]:
@@ -327,6 +199,7 @@ def render_voice_input() -> None:
     audio_value = st.audio_input(
         ui_text("record_question"),
         sample_rate=16000,
+        key=f"audio_input_{st.session_state.reset_generation}",
     )
 
     if audio_value is None:
@@ -363,7 +236,10 @@ def render_suggested_questions() -> None:
 
     for index, question in enumerate(suggested_questions()):
         with cols[index % 2]:
-            if st.button(question):
+            if st.button(
+                question,
+                key=f"suggested_{current_ui_language()}_{index}_{st.session_state.reset_generation}",
+            ):
                 st.session_state.pending_prompt = question
 
 
@@ -383,9 +259,7 @@ def render_chat_history() -> None:
 
 def handle_user_prompt(prompt: str) -> None:
     """Send user prompt to the backend agent and render the response."""
-    prompt_language = detect_tts_language(prompt)
-    if prompt_language != DEFAULT_LANGUAGE:
-        st.session_state.current_language = prompt_language
+    remember_language_from_text(prompt)
 
     update_checklist_from_text(prompt)
 
@@ -400,7 +274,7 @@ def handle_user_prompt(prompt: str) -> None:
                 assistant_reply = chat(prompt, checklist_context())
 
             st.write(assistant_reply)
-            st.session_state.current_language = detect_tts_language(assistant_reply)
+            remember_language_from_text(assistant_reply)
 
             st.session_state.messages.append(
                 {"role": "assistant", "content": assistant_reply}
@@ -437,6 +311,7 @@ def main() -> None:
     )
 
     initialize_state()
+    render_sidebar()
 
     st.title(ui_text("page_title"))
     st.caption(ui_text("page_caption"))
@@ -453,7 +328,10 @@ def main() -> None:
 
     render_chat_history()
 
-    typed_prompt = st.chat_input(ui_text("chat_input"))
+    typed_prompt = st.chat_input(
+        ui_text("chat_input"),
+        key=f"chat_input_{st.session_state.reset_generation}",
+    )
 
     prompt = st.session_state.pending_prompt or typed_prompt
 
@@ -461,8 +339,8 @@ def main() -> None:
         st.session_state.pending_prompt = None
         handle_user_prompt(prompt)
 
-    render_sidebar()
-
 
 if __name__ == "__main__":
     main()
+
+
