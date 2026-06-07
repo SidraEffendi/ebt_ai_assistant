@@ -38,6 +38,7 @@ Keep every reply under 3 sentences — responses will be spoken aloud.
 Never use bullet points, markdown, or special characters.
 Speak naturally, like a conversation.
 Do not ask for or repeat back sensitive personal information such as Social Security numbers, bank account details, or passwords.
+If user asks to switch language, please return responses in that language.
 """
 
 # Groq model — swap for "llama-3.1-8b-instant" (faster) or "openai/gpt-oss-20b", etc.
@@ -155,6 +156,7 @@ def run():
         "Hello! I'm your EBT application assistant, here to help you apply for food assistance benefits. "
         "Please do not share sensitive personal information such as Social Security numbers, "
         "bank account details, or passwords during our conversation. "
+        "You can request to switch language at any time."
         "How can I help you today?"
     )
 
