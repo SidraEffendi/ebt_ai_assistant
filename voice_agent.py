@@ -135,7 +135,7 @@ def listen(timeout: int = 8, phrase_limit: int = 15) -> str | None:
 
     print("   (processing…)")
     try:
-        text = recognizer.recognize_google(audio)
+        text = recognizer.recognize_whisper(audio)
         print(f"👤 You: {text}")
         return text
     except sr.UnknownValueError:
@@ -157,7 +157,7 @@ def transcribe_audio_bytes(audio_bytes: bytes) -> str | None:
         with sr.AudioFile(io.BytesIO(audio_bytes)) as source:
             audio = recognizer.record(source)
 
-        text = recognizer.recognize_google(audio)
+        text = recognizer.recognize_whisper(audio)
         return text
 
     except sr.UnknownValueError:
