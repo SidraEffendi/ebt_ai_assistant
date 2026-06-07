@@ -1,5 +1,20 @@
 The voice AI agent is an EBT application assistant that helps you get your EBT documents in order. It listens on your microphone and replies out loud, powered by Groq's free LLM API.
 
+## Web UI
+
+This repo also includes a minimal Vercel-ready browser UI:
+
+- `index.html`, `styles.css`, and `script.js` provide the microphone interface.
+- `api/chat.js` is a Vercel serverless endpoint that calls Groq.
+- Set `GROQ_API_KEY` in your Vercel project environment variables before deploying.
+
+Run locally with:
+
+```
+npm install
+npm run dev
+```
+
 ## Setup
 
 1. Install dependencies:
