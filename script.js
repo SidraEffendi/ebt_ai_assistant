@@ -1,33 +1,34 @@
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-const micButton = document.querySelector("#micButton");
 const recordingBanner = document.querySelector("#recordingBanner");
+const recordingText = document.querySelector("#recordingText");
 const statusText = document.querySelector("#statusText");
+const connectionPill = document.querySelector("#connectionPill");
 const chatLog = document.querySelector("#chatLog");
-const textForm = document.querySelector("#textForm");
-const textInput = document.querySelector("#textInput");
+const enableVoiceButton = document.querySelector("#enableVoiceButton");
 
 const messages = [];
 let recognition;
-let isRecording = false;
+let voiceEnabled = false;
+let requestedRecording = false;
+let activeRecording = false;
 let pendingTranscript = "";
 
-function setStatus(text) {
-  statusText.textContent = text;
+function setConnected(connected) {
+  connectionPill.textContent = connected ? "Online" : "Offline";
+  connectionPill.classList.toggle("online", connected);
+  statusText.textContent = connected ? "Connected to Python agent" : "Waiting for Python agent";
 }
 
 function setRecording(recording) {
-  isRecording = recording;
-  micButton.classList.toggle("recording", recording);
-  recordingBanner.hidden = !recording;
-  micButton.setAttribute("aria-label", recording ? "Stop voice input" : "Start voice input");
-  setStatus(recording ? "Recording" : "Ready");
+  recordingBanner.classList.toggle("is-idle", !recording);
+  recordingText.textContent = recording ? "Recording" : "Idle";
 }
 
 function renderEmptyState() {
   if (messages.length > 0) return;
   chatLog.innerHTML =
-    '<p class="empty">Tap the microphone and ask about getting EBT application documents in order.</p>';
+    '<p class="empty">Run the Python agent, enable voice input, then speak when Recording appears.</p>';
 }
 
 function appendMessage(role, content) {
@@ -38,7 +39,7 @@ function appendMessage(role, content) {
 
   const message = document.createElement("article");
   message.className = `message ${role}`;
-  const label = role === "user" ? "You" : role === "assistant" ? "Assistant" : "Status";
+  const label = role === "user" ? "Voice input" : role === "assistant" ? "Chat output" : "Status";
   message.innerHTML = `<strong>${label}</strong>${escapeHtml(content)}`;
   chatLog.appendChild(message);
   chatLog.scrollTop = chatLog.scrollHeight;
@@ -57,49 +58,31 @@ function escapeHtml(value) {
   });
 }
 
-async function sendToAgent(userText) {
-  const trimmed = userText.trim();
-  if (!trimmed) return;
-
-  appendMessage("user", trimmed);
-  setStatus("Thinking");
-
-  try {
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: messages.filter((message) => ["user", "assistant"].includes(message.role)),
-      }),
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || "Request failed.");
-    }
-
-    appendMessage("assistant", data.reply);
-    speak(data.reply);
-    setStatus("Ready");
-  } catch (error) {
-    appendMessage("system", error.message || "Something went wrong.");
-    setStatus("Ready");
-  }
+async function postListenResult(text) {
+  await fetch("/listen-result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
 }
 
-function speak(text) {
-  if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 1;
-  window.speechSynthesis.speak(utterance);
+function startBrowserListening() {
+  requestedRecording = true;
+  if (!recognition || activeRecording || !voiceEnabled) return;
+
+  pendingTranscript = "";
+
+  try {
+    recognition.start();
+  } catch (error) {
+    postListenResult("");
+  }
 }
 
 function setupSpeechRecognition() {
   if (!SpeechRecognition) {
-    micButton.disabled = true;
-    micButton.title = "Speech recognition is not supported in this browser.";
-    appendMessage("system", "Speech recognition is not supported in this browser. You can still type.");
+    enableVoiceButton.disabled = true;
+    appendMessage("system", "This browser does not support voice input. Use Chrome or Edge for browser audio.");
     return;
   }
 
@@ -109,7 +92,7 @@ function setupSpeechRecognition() {
   recognition.continuous = false;
 
   recognition.onstart = () => {
-    pendingTranscript = "";
+    activeRecording = true;
     setRecording(true);
   };
 
@@ -120,38 +103,82 @@ function setupSpeechRecognition() {
   };
 
   recognition.onerror = (event) => {
+    activeRecording = false;
     setRecording(false);
-    appendMessage("system", event.error === "not-allowed" ? "Microphone permission was denied." : "Voice input stopped.");
+    appendMessage("system", event.error === "not-allowed" ? "Browser audio permission was denied." : "Voice input stopped.");
+    postListenResult("");
   };
 
   recognition.onend = () => {
-    const transcript = pendingTranscript.trim();
+    activeRecording = false;
     setRecording(false);
-    if (transcript) sendToAgent(transcript);
+
+    if (!requestedRecording) return;
+    requestedRecording = false;
+    postListenResult(pendingTranscript.trim());
   };
 }
 
-micButton.addEventListener("click", () => {
-  if (!recognition) return;
-
-  if (isRecording) {
-    recognition.stop();
+function connectToPythonEvents() {
+  if (!("EventSource" in window)) {
+    appendMessage("system", "This browser does not support live event streaming.");
     return;
   }
 
-  try {
-    recognition.start();
-  } catch (error) {
-    setRecording(false);
-  }
-});
+  const events = new EventSource("/events");
 
-textForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const value = textInput.value;
-  textInput.value = "";
-  sendToAgent(value);
+  events.addEventListener("open", () => {
+    setConnected(true);
+  });
+
+  events.addEventListener("message", (event) => {
+    const payload = JSON.parse(event.data);
+
+    if (payload.type === "recording") {
+      if (payload.recording) {
+        startBrowserListening();
+      } else if (recognition && activeRecording) {
+        recognition.stop();
+      } else {
+        setRecording(false);
+      }
+      return;
+    }
+
+    if (payload.type === "listen_output") {
+      appendMessage("user", payload.text);
+      return;
+    }
+
+    if (payload.type === "chat_output") {
+      appendMessage("assistant", payload.text);
+      return;
+    }
+
+    if (payload.type === "status") {
+      appendMessage("system", payload.text);
+    }
+  });
+
+  events.addEventListener("error", () => {
+    setConnected(false);
+    setRecording(false);
+  });
+}
+
+enableVoiceButton.addEventListener("click", () => {
+  voiceEnabled = true;
+  enableVoiceButton.textContent = "Voice input enabled";
+  enableVoiceButton.disabled = true;
+  appendMessage("system", "Voice input enabled. Speak when Recording appears.");
+
+  if (requestedRecording) {
+    startBrowserListening();
+  }
 });
 
 setupSpeechRecognition();
 renderEmptyState();
+setRecording(false);
+setConnected(false);
+connectToPythonEvents();

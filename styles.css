@@ -24,11 +24,6 @@ body {
   color: var(--ink);
 }
 
-button,
-input {
-  font: inherit;
-}
-
 .app {
   min-height: 100vh;
   display: grid;
@@ -41,7 +36,7 @@ input {
   height: min(780px, calc(100vh - 48px));
   min-height: 520px;
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto 1fr;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -71,45 +66,50 @@ h1 {
   font-size: 0.9rem;
 }
 
-.mic-button {
-  width: 58px;
-  height: 58px;
-  flex: 0 0 58px;
-  display: grid;
-  place-items: center;
-  color: white;
-  background: var(--accent);
-  border: 0;
-  border-radius: 50%;
-  cursor: pointer;
-  transition:
-    background 140ms ease,
-    transform 140ms ease,
-    box-shadow 140ms ease;
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
 }
 
-.mic-button:hover {
+.enable-button {
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.enable-button:hover {
   background: var(--accent-dark);
 }
 
-.mic-button:active {
-  transform: scale(0.96);
+.enable-button:disabled {
+  cursor: default;
+  background: #cbd5e1;
 }
 
-.mic-button svg {
-  width: 28px;
-  height: 28px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.connection-pill {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
-.mic-button.recording {
-  background: var(--danger);
-  box-shadow: 0 0 0 8px rgba(225, 29, 72, 0.12), 0 0 30px rgba(225, 29, 72, 0.75);
-  animation: glow 1.15s ease-in-out infinite;
+.connection-pill.online {
+  border-color: #99f6e4;
+  background: #ecfdf5;
+  color: #0f766e;
 }
 
 .recording-banner {
@@ -123,12 +123,27 @@ h1 {
   border-bottom: 1px solid #fecdd3;
 }
 
+.recording-banner.is-idle {
+  background: #f8fafc;
+  color: var(--muted);
+  border-bottom-color: var(--line);
+}
+
 .recording-banner span {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: var(--danger);
   box-shadow: 0 0 0 5px rgba(225, 29, 72, 0.14);
+}
+
+.recording-banner:not(.is-idle) span {
+  animation: glow-dot 1.15s ease-in-out infinite;
+}
+
+.recording-banner.is-idle span {
+  background: #94a3b8;
+  box-shadow: none;
 }
 
 .chat-log {
@@ -186,44 +201,7 @@ h1 {
   color: #9a3412;
 }
 
-.composer {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  padding: 16px 20px 20px;
-  border-top: 1px solid var(--line);
-}
-
-.composer input {
-  min-width: 0;
-  height: 44px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 12px;
-  color: var(--ink);
-}
-
-.composer input:focus {
-  outline: 3px solid rgba(15, 118, 110, 0.16);
-  border-color: var(--accent);
-}
-
-.composer button {
-  height: 44px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--accent);
-  color: white;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.composer button:hover {
-  background: var(--accent-dark);
-}
-
-@keyframes glow {
+@keyframes glow-dot {
   0%,
   100% {
     box-shadow: 0 0 0 8px rgba(225, 29, 72, 0.12), 0 0 22px rgba(225, 29, 72, 0.6);
@@ -249,7 +227,12 @@ h1 {
     max-width: 94%;
   }
 
-  .composer {
-    grid-template-columns: 1fr;
+  .topbar,
+  .top-actions {
+    align-items: flex-start;
+  }
+
+  .top-actions {
+    flex-direction: column;
   }
 }
