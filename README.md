@@ -6,11 +6,13 @@ The voice AI agent is an EBT application assistant that helps you get your EBT d
    ```
    pip install -r requirements.txt
    ```
-2. Get a free Groq API key at https://console.groq.com/keys and set it:
+2. Get a free Groq API key at https://console.groq.com/keys, then add it to a
+   `.env` file in this folder (copy `.env.example` to `.env`):
    ```
-   setx GROQ_API_KEY "your-key-here"     # Windows (then reopen the terminal)
-   export GROQ_API_KEY=your-key-here      # macOS / Linux
+   GROQ_API_KEY=your-key-here
    ```
+   The `.env` file is gitignored, so your key won't be committed. (You can also
+   set `GROQ_API_KEY` as a normal environment variable instead.)
 3. Run it:
    ```
    python voice_agent.py

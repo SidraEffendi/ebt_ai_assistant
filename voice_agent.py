@@ -23,8 +23,12 @@ import sys
 
 import groq
 from groq import Groq
+from dotenv import load_dotenv
 import speech_recognition as sr
 import pyttsx3
+
+# Load GROQ_API_KEY (and any other vars) from a local .env file, if present.
+load_dotenv()
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -46,9 +50,10 @@ SPEECH_VOLUME = 1.0   # 0.0 – 1.0
 if not os.environ.get("GROQ_API_KEY"):
     print(
         "GROQ_API_KEY is not set.\n"
-        "Get a free key at https://console.groq.com/keys and set it before running:\n"
-        '    setx GROQ_API_KEY "your-key-here"   (Windows, then reopen the terminal)\n'
-        "    export GROQ_API_KEY=your-key-here    (macOS / Linux)"
+        "Get a free key at https://console.groq.com/keys, then add it to a .env file\n"
+        "in this folder:\n"
+        "    GROQ_API_KEY=your-key-here\n"
+        "(or set it as an environment variable instead)."
     )
     sys.exit(1)
 
