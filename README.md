@@ -19,3 +19,12 @@ The voice AI agent is an EBT application assistant that helps you get your EBT d
    ```
 
 Say "quit" or "exit" to stop, or "change instructions" to update the agent at runtime.
+
+## Run the frontend
+
+Do not run `python app.py`.
+
+Run the Streamlit frontend with:
+
+```bash
+python -m streamlit run app.py

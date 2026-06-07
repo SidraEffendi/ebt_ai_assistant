@@ -18,6 +18,7 @@ On macOS you may need:  brew install portaudio
 On Linux:               sudo apt install portaudio19-dev python3-pyaudio espeak
 """
 
+import io
 import os
 import sys
 
@@ -48,21 +49,37 @@ SPEECH_VOLUME = 1.0   # 0.0 – 1.0
 
 # ─── Setup ────────────────────────────────────────────────────────────────────
 
-if not os.environ.get("GROQ_API_KEY"):
-    print(
-        "GROQ_API_KEY is not set.\n"
-        "Get a free key at https://console.groq.com/keys, then add it to a .env file\n"
-        "in this folder:\n"
-        "    GROQ_API_KEY=your-key-here\n"
-        "(or set it as an environment variable instead)."
-    )
-    sys.exit(1)
-
-client     = Groq()   # reads GROQ_API_KEY from env
+client = None
 recognizer = sr.Recognizer()
 
 conversation_history = []
 
+
+def get_client() -> Groq:
+    """
+    Create and return the Groq client.
+
+    We do this lazily so voice_agent.py can be safely imported by the
+    Streamlit frontend. If the API key is missing, the frontend can show
+    a friendly error instead of the whole app exiting during import.
+    """
+    global client
+
+    if client is not None:
+        return client
+
+    if not os.environ.get("GROQ_API_KEY"):
+        raise RuntimeError(
+            "GROQ_API_KEY is not set. Copy .env.example to .env and add your Groq API key."
+        )
+
+    client = Groq()
+    return client
+
+
+def reset_conversation() -> None:
+    """Clear the in-memory conversation history."""
+    conversation_history.clear()
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -112,12 +129,39 @@ def listen(timeout: int = 8, phrase_limit: int = 15) -> str | None:
         print(f"   (Google Speech API error: {e})")
         return None
 
+def transcribe_audio_bytes(audio_bytes: bytes) -> str | None:
+    """
+    Transcribe browser-recorded audio from the Streamlit frontend.
+
+    Streamlit's st.audio_input gives us audio bytes. We wrap those bytes
+    in a file-like object and let SpeechRecognition process them as an
+    audio file.
+    """
+    try:
+        with sr.AudioFile(io.BytesIO(audio_bytes)) as source:
+            audio = recognizer.record(source)
+
+        text = recognizer.recognize_google(audio)
+        return text
+
+    except sr.UnknownValueError:
+        return None
+
+    except sr.RequestError as e:
+        print(f"Google Speech API error: {e}")
+        return None
+
+    except Exception as e:
+        print(f"Audio transcription error: {e}")
+        return None
 
 def chat(user_text: str) -> str:
     """Send user_text to Groq and return the assistant reply."""
+    groq_client = get_client()
+
     conversation_history.append({"role": "user", "content": user_text})
 
-    response = client.chat.completions.create(
+    response = groq_client.chat.completions.create(
         model=MODEL,
         max_tokens=512,
         messages=[{"role": "system", "content": AGENT_INSTRUCTIONS.strip()}]
@@ -143,6 +187,12 @@ def update_instructions(new_instructions: str) -> None:
 # ─── Main loop ────────────────────────────────────────────────────────────────
 
 def run():
+    try:
+        get_client()
+    except RuntimeError as e:
+        print(e)
+        sys.exit(1)
+
     print("=" * 55)
     print("  Voice AI Agent  —  powered by Groq")
     print("=" * 55)
