@@ -189,6 +189,10 @@ def render_sidebar() -> None:
 
         st.write("Use this as a simple guide while preparing your application.")
 
+        if st.button("Reset conversation"):
+            reset_app()
+            st.rerun()
+
         for item in CHECKLIST_ITEMS:
             widget_key = checklist_widget_key(item["id"])
             st.checkbox(item["label"], key=widget_key)
@@ -206,10 +210,6 @@ def render_sidebar() -> None:
 
         st.subheader("Readiness")
         st.write("Check off documents as you collect them.")
-
-        if st.button("Reset conversation"):
-            reset_app()
-            st.rerun()
 
 
 def render_voice_input() -> None:
