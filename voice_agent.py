@@ -26,7 +26,12 @@ import groq
 from groq import Groq
 from dotenv import load_dotenv
 import speech_recognition as sr
-import pyttsx3
+
+try:
+    import pyttsx3
+    _TTS_AVAILABLE = True
+except ImportError:
+    _TTS_AVAILABLE = False
 
 # Load GROQ_API_KEY (and any other vars) from a local .env file, if present.
 load_dotenv()
@@ -84,13 +89,10 @@ def reset_conversation() -> None:
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def speak(text: str) -> None:
-    """Convert text to speech and play it.
-
-    A fresh engine is created per call on purpose: reusing a single pyttsx3
-    engine on Windows (SAPI5) only produces audio on the first runAndWait(),
-    leaving later utterances silent.
-    """
+    """Convert text to speech and play it (CLI only; not used by the web app)."""
     print(f"\n🤖 Agent: {text}\n")
+    if not _TTS_AVAILABLE:
+        return
     engine = pyttsx3.init()
     engine.setProperty("rate",   SPEECH_RATE)
     engine.setProperty("volume", SPEECH_VOLUME)
