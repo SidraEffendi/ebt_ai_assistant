@@ -324,10 +324,14 @@ def run():
 
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+def main() -> None:
     # Optional: accept instructions as a CLI argument
     # Usage: python voice_agent.py "You are a pirate assistant."
     if len(sys.argv) > 1:
         update_instructions(" ".join(sys.argv[1:]))
 
     run()
+
+
+if __name__ == "__main__":
+    main()

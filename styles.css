@@ -15,6 +15,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -24,11 +28,18 @@ body {
   color: var(--ink);
 }
 
+button,
+input,
+textarea {
+  font: inherit;
+}
+
 .app {
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 24px;
+  position: relative;
 }
 
 .shell {
@@ -36,7 +47,7 @@ body {
   height: min(780px, calc(100vh - 48px));
   min-height: 520px;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto 1fr auto;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -73,43 +84,35 @@ h1 {
   flex: 0 0 auto;
 }
 
-.enable-button {
+.primary-button,
+.secondary-button {
   height: 36px;
   padding: 0 12px;
-  border: 0;
   border-radius: 8px;
-  background: var(--accent);
-  color: #ffffff;
   cursor: pointer;
-  font: inherit;
   font-size: 0.86rem;
   font-weight: 700;
 }
 
-.enable-button:hover {
+.primary-button {
+  border: 0;
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.primary-button:hover {
   background: var(--accent-dark);
 }
 
-.enable-button:disabled {
+.primary-button:disabled {
   cursor: default;
   background: #cbd5e1;
 }
 
-.connection-pill {
-  flex: 0 0 auto;
-  padding: 8px 10px;
+.secondary-button {
+  background: #ffffff;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.connection-pill.online {
-  border-color: #99f6e4;
-  background: #ecfdf5;
-  color: #0f766e;
+  color: var(--ink);
 }
 
 .recording-banner {
@@ -201,6 +204,80 @@ h1 {
   color: #9a3412;
 }
 
+.composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.composer input {
+  min-width: 0;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--ink);
+}
+
+.composer input:focus,
+.instructions-box textarea:focus {
+  outline: 3px solid rgba(15, 118, 110, 0.16);
+  border-color: var(--accent);
+}
+
+.composer button {
+  height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.instructions-panel {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.26);
+}
+
+.instructions-box {
+  width: min(620px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+}
+
+.instructions-box label {
+  font-weight: 800;
+}
+
+.instructions-box textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 @keyframes glow-dot {
   0%,
   100% {
@@ -234,5 +311,9 @@ h1 {
 
   .top-actions {
     flex-direction: column;
+  }
+
+  .composer {
+    grid-template-columns: 1fr;
   }
 }

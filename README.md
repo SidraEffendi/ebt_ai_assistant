@@ -1,22 +1,24 @@
-The voice AI agent is an EBT application assistant that helps you get your EBT documents in order. It listens through the browser UI and replies out loud, powered by Groq's free LLM API.
+The voice AI agent is an EBT application assistant that helps you get your EBT documents in order. It listens through the browser, calls Groq from a Vercel API route, logs the conversation, and replies out loud.
 
 ## Web UI
 
-This repo also includes a minimal browser UI for the Python voice agent:
+This repo includes a minimal Vercel-ready browser UI:
 
-- `index.html`, `styles.css`, and `script.js` show the live Recording state and conversation log.
-- `voice_agent.py` serves the UI locally and streams Python events from `listen()` and `chat()`.
-- `listen()` triggers browser voice input and waits for the browser transcript.
-- Voice inputs are logged from the return value of `listen()`.
-- Chat responses are logged from the return value of `chat()`.
+- `index.html`, `styles.css`, and `script.js` run the browser voice experience.
+- `api/chat.js` calls Groq with the current conversation and agent instructions.
+- The UI shows `Recording` while browser voice recognition is active.
+- Voice inputs and assistant responses are logged in a scrollable chat window.
+- Saying `quit`, `exit`, `stop`, or `goodbye` ends the conversation with a farewell.
+- Saying `change instructions` or `update instructions` lets you replace the agent instructions and resets the conversation.
 
-Run the UI with the Python agent:
+Run locally with Vercel:
 
 ```
-python voice_agent.py
+npm install
+npm run dev
 ```
 
-Then open the printed local URL, usually `http://127.0.0.1:8765`.
+Set `GROQ_API_KEY` in `.env` locally and in Vercel project environment variables before deploying.
 
 ## Setup
 

@@ -12,11 +12,11 @@
         <header class="topbar">
           <div>
             <h1>EBT Voice Assistant</h1>
-            <p id="statusText">Waiting for Python agent</p>
+            <p id="statusText">Ready</p>
           </div>
           <div class="top-actions">
-            <button id="enableVoiceButton" class="enable-button" type="button">Enable voice input</button>
-            <div id="connectionPill" class="connection-pill">Offline</div>
+            <button id="instructionsButton" class="secondary-button" type="button">Instructions</button>
+            <button id="listenButton" class="primary-button" type="button">Start listening</button>
           </div>
         </header>
 
@@ -26,6 +26,28 @@
         </div>
 
         <section id="chatLog" class="chat-log" aria-live="polite" aria-label="Conversation log"></section>
+
+        <form id="textForm" class="composer">
+          <input
+            id="textInput"
+            type="text"
+            autocomplete="off"
+            placeholder="Type a message or new instructions"
+            aria-label="Message"
+          />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+
+      <section id="instructionsPanel" class="instructions-panel" aria-label="Agent instructions" hidden>
+        <div class="instructions-box">
+          <label for="instructionsInput">Agent instructions</label>
+          <textarea id="instructionsInput" rows="8"></textarea>
+          <div class="panel-actions">
+            <button id="resetInstructionsButton" class="secondary-button" type="button">Reset</button>
+            <button id="saveInstructionsButton" class="primary-button" type="button">Save</button>
+          </div>
+        </div>
       </section>
     </main>
 

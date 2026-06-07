@@ -1,4 +1,4 @@
-const SYSTEM_PROMPT = `
+const DEFAULT_SYSTEM_PROMPT = `
 You are an EBT application assistant helping clients apply for food assistance benefits.
 Keep every reply under 3 sentences because responses may be spoken aloud.
 Never use bullet points, markdown, or special characters.
@@ -18,7 +18,12 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: "GROQ_API_KEY is not configured." });
   }
 
-  const { messages = [] } = req.body || {};
+  const { messages = [], instructions } = req.body || {};
+  const systemPrompt =
+    typeof instructions === "string" && instructions.trim()
+      ? instructions.trim().slice(0, 4000)
+      : DEFAULT_SYSTEM_PROMPT.trim();
+
   const safeMessages = messages
     .filter((message) => message && ["user", "assistant"].includes(message.role))
     .slice(-12)
@@ -37,7 +42,7 @@ module.exports = async function handler(req, res) {
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         max_tokens: 512,
-        messages: [{ role: "system", content: SYSTEM_PROMPT.trim() }, ...safeMessages],
+        messages: [{ role: "system", content: systemPrompt }, ...safeMessages],
       }),
     });
 
