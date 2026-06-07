@@ -234,7 +234,11 @@ def render_voice_input() -> None:
     st.session_state.last_audio_hash = audio_hash
 
     with st.spinner("Transcribing your voice..."):
-        transcript = transcribe_audio_bytes(audio_bytes)
+        try:
+            transcript = transcribe_audio_bytes(audio_bytes)
+        except RuntimeError as e:
+            st.error(str(e))
+            return
 
     if transcript:
         st.success(f"You said: {transcript}")

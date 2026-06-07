@@ -2,4 +2,3 @@ groq
 python-dotenv
 SpeechRecognition
 streamlit>=1.39.0
-openai-whisper

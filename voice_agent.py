@@ -18,7 +18,6 @@ On macOS you may need:  brew install portaudio
 On Linux:               sudo apt install portaudio19-dev python3-pyaudio espeak
 """
 
-import io
 import json
 import os
 import sys
@@ -51,6 +50,7 @@ When the user asks what requirements or documents they have fulfilled, answer fr
 
 # Groq model — swap for "llama-3.1-8b-instant" (faster) or "openai/gpt-oss-20b", etc.
 MODEL         = "llama-3.3-70b-versatile"
+TRANSCRIPTION_MODEL = "whisper-large-v3-turbo"
 SPEECH_RATE   = 175   # words per minute (pyttsx3)
 SPEECH_VOLUME = 1.0   # 0.0 – 1.0
 
@@ -135,36 +135,50 @@ def listen(timeout: int = 8, phrase_limit: int = 15) -> str | None:
 
     print("   (processing…)")
     try:
-        text = recognizer.recognize_whisper(audio)
+        text = transcribe_audio_bytes(
+            audio.get_wav_data(convert_rate=16000, convert_width=2),
+            filename="microphone.wav",
+        )
+        if not text:
+            print("   (could not understand audio)")
+            return None
         print(f"👤 You: {text}")
         return text
     except sr.UnknownValueError:
         print("   (could not understand audio)")
         return None
     except sr.RequestError as e:
-        print(f"   (Google Speech API error: {e})")
+        print(f"   (microphone recording error: {e})")
         return None
 
-def transcribe_audio_bytes(audio_bytes: bytes) -> str | None:
+def transcribe_audio_bytes(
+    audio_bytes: bytes,
+    filename: str = "recording.wav",
+) -> str | None:
     """
     Transcribe browser-recorded audio from the Streamlit frontend.
 
-    Streamlit's st.audio_input gives us audio bytes. We wrap those bytes
-    in a file-like object and let SpeechRecognition process them as an
-    audio file.
+    Streamlit's st.audio_input gives us audio bytes. The CLI listener also
+    passes WAV bytes recorded from the microphone. Both paths use Groq's
+    hosted Whisper model instead of local SpeechRecognition transcription.
     """
     try:
-        with sr.AudioFile(io.BytesIO(audio_bytes)) as source:
-            audio = recognizer.record(source)
+        groq_client = get_client()
+        transcription = groq_client.audio.transcriptions.create(
+            file=(filename, audio_bytes),
+            model=TRANSCRIPTION_MODEL,
+            response_format="json",
+            temperature=0,
+        )
 
-        text = recognizer.recognize_whisper(audio)
-        return text
+        text = getattr(transcription, "text", "")
+        return text.strip() or None
 
-    except sr.UnknownValueError:
-        return None
+    except RuntimeError:
+        raise
 
-    except sr.RequestError as e:
-        print(f"Google Speech API error: {e}")
+    except groq.APIError as e:
+        print(f"Groq Whisper transcription error: {e}")
         return None
 
     except Exception as e:
