@@ -105,6 +105,15 @@ def checklist_label(item_id: str) -> str:
     return localized_checklist_label(st.session_state.current_language, item_id)
 
 
+def remember_language_from_text(text: str) -> None:
+    """Update remembered language without letting weak English detections erase it."""
+    detected_language = normalize_tts_language(detect_tts_language(text))
+    current_language = normalize_tts_language(st.session_state.current_language)
+
+    if detected_language != DEFAULT_LANGUAGE or current_language == DEFAULT_LANGUAGE:
+        st.session_state.current_language = detected_language
+
+
 def welcome_message(language: str) -> dict[str, str | bool]:
     """Build a marked welcome chat message for the current language."""
     return {
