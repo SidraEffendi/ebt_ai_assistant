@@ -1,255 +1,258 @@
-import hashlib
+import html
 import json
+from urllib.parse import parse_qs
 
-import streamlit as st
-import streamlit.components.v1 as components
-
-from voice_agent import chat, reset_conversation, transcribe_audio_bytes
+from voice_agent import WELCOME_MESSAGE, chat, reset_conversation
 
 
-WELCOME_MESSAGE = (
-    "Hi, I can help you get your EBT documents in order. "
-    "Please do not share Social Security numbers, bank account details, passwords, "
-    "or other highly sensitive information."
-)
+HTML_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EBT AI Assistant</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      font-family: Arial, sans-serif;
+      background: #f6f7f9;
+      color: #1f2933;
+    }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }}
+    main {{
+      width: min(760px, 100%);
+      background: #ffffff;
+      border: 1px solid #d9e2ec;
+      border-radius: 8px;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }}
+    header, form, .notice {{
+      padding: 20px 24px;
+    }}
+    header {{
+      border-bottom: 1px solid #e4e7eb;
+    }}
+    h1 {{
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.2;
+    }}
+    p {{
+      margin: 0;
+      line-height: 1.5;
+    }}
+    .notice {{
+      background: #fff8e6;
+      border-bottom: 1px solid #f3d27a;
+      color: #5c4200;
+    }}
+    .messages {{
+      min-height: 260px;
+      max-height: 52vh;
+      overflow-y: auto;
+      padding: 20px 24px;
+      display: grid;
+      gap: 12px;
+      background: #fbfcfd;
+    }}
+    .message {{
+      padding: 12px 14px;
+      border-radius: 8px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }}
+    .assistant {{
+      background: #e8f1ff;
+      justify-self: start;
+    }}
+    .user {{
+      background: #dff7ec;
+      justify-self: end;
+    }}
+    form {{
+      display: grid;
+      gap: 12px;
+      border-top: 1px solid #e4e7eb;
+    }}
+    textarea {{
+      min-height: 96px;
+      resize: vertical;
+      border: 1px solid #bcccdc;
+      border-radius: 8px;
+      padding: 12px;
+      font: inherit;
+    }}
+    .actions {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    button {{
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font: inherit;
+      cursor: pointer;
+    }}
+    button[type="submit"] {{
+      background: #2563eb;
+      color: white;
+    }}
+    button[type="button"] {{
+      background: #e4e7eb;
+      color: #243b53;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>EBT AI Assistant</h1>
+      <p>A text chat version of the assistant for Vercel deployment.</p>
+    </header>
+    <div class="notice">
+      Please do not enter Social Security numbers, bank account numbers, passwords, or other highly sensitive personal information.
+    </div>
+    <section class="messages" id="messages">
+      <div class="message assistant">{welcome}</div>
+    </section>
+    <form id="chat-form">
+      <textarea id="prompt" name="prompt" placeholder="Type your question here" required></textarea>
+      <div class="actions">
+        <button type="button" id="reset">Reset conversation</button>
+        <button type="submit">Send</button>
+      </div>
+    </form>
+  </main>
+  <script>
+    const messages = document.getElementById("messages");
+    const form = document.getElementById("chat-form");
+    const promptInput = document.getElementById("prompt");
+    const resetButton = document.getElementById("reset");
 
-SUGGESTED_QUESTIONS = [
-    "What documents do I need for an EBT application?",
-    "What can I use as proof of income?",
-    "What can I use as proof of address?",
-    "How should I organize my documents before applying?",
-]
+    function addMessage(role, text) {{
+      const node = document.createElement("div");
+      node.className = `message ${{role}}`;
+      node.textContent = text;
+      messages.appendChild(node);
+      messages.scrollTop = messages.scrollHeight;
+    }}
+
+    form.addEventListener("submit", async (event) => {{
+      event.preventDefault();
+      const prompt = promptInput.value.trim();
+      if (!prompt) return;
+
+      addMessage("user", prompt);
+      promptInput.value = "";
+
+      const pending = document.createElement("div");
+      pending.className = "message assistant";
+      pending.textContent = "Thinking...";
+      messages.appendChild(pending);
+      messages.scrollTop = messages.scrollHeight;
+
+      try {{
+        const response = await fetch("/chat", {{
+          method: "POST",
+          headers: {{ "content-type": "application/json" }},
+          body: JSON.stringify({{ prompt }}),
+        }});
+        const data = await response.json();
+        pending.textContent = data.reply || data.error || "Sorry, something went wrong.";
+      }} catch (error) {{
+        pending.textContent = "Sorry, I had trouble reaching the assistant.";
+      }}
+    }});
+
+    resetButton.addEventListener("click", async () => {{
+      await fetch("/reset", {{ method: "POST" }});
+      messages.innerHTML = "";
+      addMessage("assistant", {welcome_json});
+    }});
+  </script>
+</body>
+</html>
+"""
 
 
-def initialize_state() -> None:
-    """Initialize Streamlit session state."""
-    if "messages" not in st.session_state:
-        st.session_state.messages = [
-            {"role": "assistant", "content": WELCOME_MESSAGE}
-        ]
-
-    if "pending_prompt" not in st.session_state:
-        st.session_state.pending_prompt = None
-
-    if "last_audio_hash" not in st.session_state:
-        st.session_state.last_audio_hash = None
-
-    if "auto_read_responses" not in st.session_state:
-        st.session_state.auto_read_responses = True
-
-
-def reset_app() -> None:
-    """Reset both frontend and backend conversation state."""
-    reset_conversation()
-    st.session_state.messages = [
-        {"role": "assistant", "content": WELCOME_MESSAGE}
-    ]
-    st.session_state.pending_prompt = None
-    st.session_state.last_audio_hash = None
-
-
-def speak_in_browser(text: str) -> None:
-    """
-    Speak assistant reply in the browser using the Web Speech API.
-
-    This is better than calling pyttsx3 from Streamlit because pyttsx3
-    speaks on the server machine, not necessarily in the user's browser.
-    """
-    safe_text = json.dumps(text)
-
-    components.html(
-        f"""
-        <script>
-        const text = {safe_text};
-
-        function speakText() {{
-            const synth = window.speechSynthesis;
-            if (!synth) {{
-                return;
-            }}
-
-            synth.cancel();
-
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.95;
-            utterance.pitch = 1.0;
-            utterance.volume = 1.0;
-
-            synth.speak(utterance);
-        }}
-
-        speakText();
-        </script>
-        """,
-        height=0,
+def _response(start_response, body, status="200 OK", content_type="text/html; charset=utf-8"):
+    payload = body.encode("utf-8")
+    start_response(
+        status,
+        [
+            ("Content-Type", content_type),
+            ("Content-Length", str(len(payload))),
+        ],
     )
+    return [payload]
 
 
-def render_sidebar() -> None:
-    """Render the document checklist sidebar."""
-    with st.sidebar:
-        st.title("Document checklist")
+def _read_json(environ):
+    try:
+        length = int(environ.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        length = 0
 
-        st.write("Use this as a simple guide while preparing your application.")
+    body = environ["wsgi.input"].read(length).decode("utf-8") if length else ""
+    content_type = environ.get("CONTENT_TYPE", "")
 
-        st.checkbox("Photo ID")
-        st.checkbox("Proof of address")
-        st.checkbox("Proof of income")
-        st.checkbox("Rent or mortgage document")
-        st.checkbox("Utility bill")
-        st.checkbox("Household member information")
-        st.checkbox("Medical or childcare expense documents, if applicable")
+    if "application/json" in content_type:
+        return json.loads(body or "{}")
 
-        st.divider()
+    form = parse_qs(body)
+    return {key: values[0] for key, values in form.items()}
 
-        st.subheader("Voice settings")
-        st.checkbox(
-            "Read assistant replies aloud",
-            key="auto_read_responses",
+
+def application(environ, start_response):
+    path = environ.get("PATH_INFO", "/")
+    method = environ.get("REQUEST_METHOD", "GET").upper()
+
+    if method == "GET" and path == "/":
+        page = HTML_PAGE.format(
+            welcome=html.escape(WELCOME_MESSAGE),
+            welcome_json=json.dumps(WELCOME_MESSAGE),
+        )
+        return _response(start_response, page)
+
+    if method == "POST" and path == "/chat":
+        try:
+            prompt = (_read_json(environ).get("prompt") or "").strip()
+            if not prompt:
+                raise ValueError("Prompt is required.")
+
+            reply = chat(prompt)
+            return _response(
+                start_response,
+                json.dumps({"reply": reply}),
+                content_type="application/json; charset=utf-8",
+            )
+        except Exception as exc:
+            return _response(
+                start_response,
+                json.dumps({"error": str(exc)}),
+                status="500 Internal Server Error",
+                content_type="application/json; charset=utf-8",
+            )
+
+    if method == "POST" and path == "/reset":
+        reset_conversation()
+        return _response(
+            start_response,
+            json.dumps({"ok": True}),
+            content_type="application/json; charset=utf-8",
         )
 
-        st.divider()
-
-        st.subheader("Readiness")
-        st.write("Check off documents as you collect them.")
-
-        if st.button("Reset conversation"):
-            reset_app()
-            st.rerun()
+    return _response(start_response, "Not found", status="404 Not Found")
 
 
-def render_voice_input() -> None:
-    """Render browser microphone input and transcribe the recording."""
-    st.subheader("Speak to the assistant")
-
-    audio_value = st.audio_input(
-        "Record your question",
-        sample_rate=16000,
-    )
-
-    if audio_value is None:
-        return
-
-    audio_bytes = audio_value.getvalue()
-    audio_hash = hashlib.md5(audio_bytes).hexdigest()
-
-    # Prevent the same recording from being processed again on every Streamlit rerun.
-    if audio_hash == st.session_state.last_audio_hash:
-        return
-
-    st.session_state.last_audio_hash = audio_hash
-
-    with st.spinner("Transcribing your voice..."):
-        transcript = transcribe_audio_bytes(audio_bytes)
-
-    if transcript:
-        st.success(f"You said: {transcript}")
-        st.session_state.pending_prompt = transcript
-    else:
-        st.warning("I could not understand the recording. Please try again or type your question.")
-
-
-def render_suggested_questions() -> None:
-    """Render quick-start prompt buttons."""
-    st.write("Try asking:")
-
-    cols = st.columns(2)
-
-    for index, question in enumerate(SUGGESTED_QUESTIONS):
-        with cols[index % 2]:
-            if st.button(question):
-                st.session_state.pending_prompt = question
-
-
-def render_chat_history() -> None:
-    """Render previous chat messages."""
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
-
-
-def handle_user_prompt(prompt: str) -> None:
-    """Send user prompt to the backend agent and render the response."""
-    st.session_state.messages.append({"role": "user", "content": prompt})
-
-    with st.chat_message("user"):
-        st.write(prompt)
-
-    with st.chat_message("assistant"):
-        try:
-            with st.spinner("Thinking..."):
-                assistant_reply = chat(prompt)
-
-            st.write(assistant_reply)
-
-            st.session_state.messages.append(
-                {"role": "assistant", "content": assistant_reply}
-            )
-
-            if st.session_state.auto_read_responses:
-                speak_in_browser(assistant_reply)
-
-        except RuntimeError as e:
-            error_message = str(e)
-            st.error(error_message)
-
-            st.session_state.messages.append(
-                {"role": "assistant", "content": error_message}
-            )
-
-        except Exception as e:
-            print(f"Frontend chat error: {e}")
-
-            error_message = (
-                "Sorry, I had trouble reaching the AI service. "
-                "Please check your API key and try again."
-            )
-
-            st.error(error_message)
-
-            st.session_state.messages.append(
-                {"role": "assistant", "content": error_message}
-            )
-
-
-def main() -> None:
-    st.set_page_config(
-        page_title="EBT AI Assistant",
-        page_icon="🧾",
-        layout="wide",
-    )
-
-    initialize_state()
-    render_sidebar()
-
-    st.title("EBT AI Assistant")
-    st.caption(
-        "A voice-first assistant to help applicants understand and organize EBT documents."
-    )
-
-    st.info(
-        "Please do not enter Social Security numbers, bank account numbers, passwords, "
-        "or other highly sensitive personal information."
-    )
-
-    render_voice_input()
-
-    st.divider()
-
-    render_suggested_questions()
-
-    st.divider()
-
-    render_chat_history()
-
-    typed_prompt = st.chat_input("Or type your question here")
-
-    prompt = st.session_state.pending_prompt or typed_prompt
-
-    if prompt:
-        st.session_state.pending_prompt = None
-        handle_user_prompt(prompt)
-
-
-if __name__ == "__main__":
-    main()
+app = application
+handler = application

@@ -19,6 +19,7 @@ On Linux:               sudo apt install portaudio19-dev python3-pyaudio espeak
 """
 
 import io
+import json
 import os
 import sys
 
@@ -45,6 +46,7 @@ Never use bullet points, markdown, or special characters.
 Speak naturally, like a conversation.
 Do not ask for or repeat back sensitive personal information such as Social Security numbers, bank account details, or passwords.
 If user asks to switch language, please return responses in that language.
+When the user asks what requirements or documents they have fulfilled, answer from the current document checklist context.
 """
 
 # Groq model — swap for "llama-3.1-8b-instant" (faster) or "openai/gpt-oss-20b", etc.
@@ -58,6 +60,18 @@ client = None
 recognizer = sr.Recognizer()
 
 conversation_history = []
+
+
+CHECKLIST_EXTRACTION_INSTRUCTIONS = """
+You update an EBT document checklist from one user message.
+The user may write in any language.
+Return only a JSON object with an "updates" object.
+Use checklist item ids as keys and true or false as values.
+Use true only when the user clearly says they have, collected, uploaded, or completed that item.
+Use false only when the user clearly says they do not have, lost, still need, or have not completed that item.
+If the message is only asking a question or is unclear, return {"updates":{}}.
+Do not infer unrelated checklist items.
+"""
 
 
 def get_client() -> Groq:
@@ -157,16 +171,78 @@ def transcribe_audio_bytes(audio_bytes: bytes) -> str | None:
         print(f"Audio transcription error: {e}")
         return None
 
-def chat(user_text: str) -> str:
+
+def extract_checklist_updates(
+    user_text: str,
+    checklist_items: list[dict[str, str]],
+) -> dict[str, bool]:
+    """Ask the model for explicit checklist updates from the user's message."""
+    groq_client = get_client()
+
+    checklist_description = "\n".join(
+        f"- {item['id']}: {item['label']}"
+        for item in checklist_items
+    )
+
+    response = groq_client.chat.completions.create(
+        model=MODEL,
+        max_tokens=128,
+        temperature=0,
+        messages=[
+            {
+                "role": "system",
+                "content": CHECKLIST_EXTRACTION_INSTRUCTIONS.strip(),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Checklist items:\n"
+                    f"{checklist_description}\n\n"
+                    "User message:\n"
+                    f"{user_text}"
+                ),
+            },
+        ],
+    )
+
+    content = response.choices[0].message.content.strip()
+
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start == -1 or end == 0:
+            return {}
+        try:
+            payload = json.loads(content[start:end])
+        except json.JSONDecodeError:
+            return {}
+
+    updates = payload.get("updates", {})
+    valid_ids = {item["id"] for item in checklist_items}
+
+    return {
+        item_id: checked
+        for item_id, checked in updates.items()
+        if item_id in valid_ids and isinstance(checked, bool)
+    }
+
+
+def chat(user_text: str, checklist_context: str | None = None) -> str:
     """Send user_text to Groq and return the assistant reply."""
     groq_client = get_client()
 
     conversation_history.append({"role": "user", "content": user_text})
 
+    system_content = AGENT_INSTRUCTIONS.strip()
+    if checklist_context:
+        system_content = f"{system_content}\n\n{checklist_context}"
+
     response = groq_client.chat.completions.create(
         model=MODEL,
         max_tokens=512,
-        messages=[{"role": "system", "content": AGENT_INSTRUCTIONS.strip()}]
+        messages=[{"role": "system", "content": system_content}]
         + conversation_history,
     )
 
