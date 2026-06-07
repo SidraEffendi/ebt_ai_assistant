@@ -15,7 +15,6 @@
             <p id="statusText">Ready</p>
           </div>
           <div class="top-actions">
-            <button id="instructionsButton" class="secondary-button" type="button">Instructions</button>
             <button id="listenButton" class="primary-button" type="button">Start listening</button>
           </div>
         </header>
@@ -32,22 +31,11 @@
             id="textInput"
             type="text"
             autocomplete="off"
-            placeholder="Type a message or new instructions"
+            placeholder="Type a message"
             aria-label="Message"
           />
           <button type="submit">Send</button>
         </form>
-      </section>
-
-      <section id="instructionsPanel" class="instructions-panel" aria-label="Agent instructions" hidden>
-        <div class="instructions-box">
-          <label for="instructionsInput">Agent instructions</label>
-          <textarea id="instructionsInput" rows="8"></textarea>
-          <div class="panel-actions">
-            <button id="resetInstructionsButton" class="secondary-button" type="button">Reset</button>
-            <button id="saveInstructionsButton" class="primary-button" type="button">Save</button>
-          </div>
-        </div>
       </section>
     </main>
 

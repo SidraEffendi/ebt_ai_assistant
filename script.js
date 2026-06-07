@@ -17,19 +17,13 @@ const chatLog = document.querySelector("#chatLog");
 const listenButton = document.querySelector("#listenButton");
 const textForm = document.querySelector("#textForm");
 const textInput = document.querySelector("#textInput");
-const instructionsButton = document.querySelector("#instructionsButton");
-const instructionsPanel = document.querySelector("#instructionsPanel");
-const instructionsInput = document.querySelector("#instructionsInput");
-const saveInstructionsButton = document.querySelector("#saveInstructionsButton");
-const resetInstructionsButton = document.querySelector("#resetInstructionsButton");
 
 const messages = [];
 let mediaRecorder;
 let audioChunks = [];
 let isRecording = false;
 let hasGreeted = false;
-let awaitingInstructionText = false;
-let agentInstructions = localStorage.getItem("agentInstructions") || DEFAULT_INSTRUCTIONS.trim();
+const agentInstructions = DEFAULT_INSTRUCTIONS.trim();
 
 function setStatus(text) {
   statusText.textContent = text;
@@ -99,39 +93,11 @@ function isExitCommand(text) {
   return ["quit", "exit", "stop", "goodbye"].some((word) => lower.startsWith(word));
 }
 
-function isInstructionCommand(text) {
-  const lower = text.toLowerCase();
-  return lower.includes("change instructions") || lower.includes("update instructions");
-}
-
-function updateInstructions(value) {
-  const next = value.trim();
-  if (!next) {
-    appendMessage("system", "No instruction changes made.");
-    return;
-  }
-
-  agentInstructions = next;
-  localStorage.setItem("agentInstructions", agentInstructions);
-  instructionsInput.value = agentInstructions;
-  messages.length = 0;
-  chatLog.innerHTML = "";
-  hasGreeted = false;
-  awaitingInstructionText = false;
-  appendMessage("system", "Instructions updated. Conversation reset.");
-  greetOnce();
-}
-
 async function sendToAgent(userText) {
   const text = userText.trim();
   if (!text) return;
 
   greetOnce();
-
-  if (awaitingInstructionText) {
-    updateInstructions(text);
-    return;
-  }
 
   if (isExitCommand(text)) {
     appendMessage("user", text);
@@ -139,16 +105,6 @@ async function sendToAgent(userText) {
     appendMessage("assistant", farewell, { save: false });
     speak(farewell);
     setStatus("Stopped");
-    return;
-  }
-
-  if (isInstructionCommand(text)) {
-    appendMessage("user", text);
-    awaitingInstructionText = true;
-    instructionsPanel.hidden = false;
-    const prompt = "Sure. Type your new instructions below or in the message box.";
-    appendMessage("assistant", prompt, { save: false });
-    speak(prompt);
     return;
   }
 
@@ -276,20 +232,6 @@ textForm.addEventListener("submit", (event) => {
   sendToAgent(value);
 });
 
-instructionsButton.addEventListener("click", () => {
-  instructionsPanel.hidden = !instructionsPanel.hidden;
-});
-
-saveInstructionsButton.addEventListener("click", () => {
-  updateInstructions(instructionsInput.value);
-  instructionsPanel.hidden = true;
-});
-
-resetInstructionsButton.addEventListener("click", () => {
-  instructionsInput.value = DEFAULT_INSTRUCTIONS.trim();
-});
-
-instructionsInput.value = agentInstructions;
 renderEmptyState();
 setRecording(false);
 setStatus("Ready");

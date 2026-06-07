@@ -6,11 +6,10 @@ This repo includes a minimal Vercel-ready browser UI:
 
 - `index.html`, `styles.css`, and `script.js` run the browser voice experience.
 - `api/transcribe.js` transcribes recorded browser audio with Groq Whisper.
-- `api/chat.js` calls Groq with the current conversation and agent instructions.
+- `api/chat.js` calls Groq with the current conversation and fixed agent instructions.
 - The UI shows `Recording` while browser audio recording is active.
 - Voice inputs and assistant responses are logged in a scrollable chat window.
 - Saying `quit`, `exit`, `stop`, or `goodbye` ends the conversation with a farewell.
-- Saying `change instructions` or `update instructions` lets you replace the agent instructions and resets the conversation.
 
 Run locally with Vercel:
 
@@ -39,4 +38,4 @@ Set `GROQ_API_KEY` in `.env` locally and in Vercel project environment variables
    python voice_agent.py
    ```
 
-Say "quit" or "exit" to stop, or "change instructions" to update the agent at runtime.
+Say "quit" or "exit" to stop the local Python agent.
