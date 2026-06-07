@@ -59,10 +59,6 @@ if not os.environ.get("GROQ_API_KEY"):
 
 client     = Groq()   # reads GROQ_API_KEY from env
 recognizer = sr.Recognizer()
-engine     = pyttsx3.init()
-
-engine.setProperty("rate",   SPEECH_RATE)
-engine.setProperty("volume", SPEECH_VOLUME)
 
 conversation_history = []
 
@@ -70,10 +66,19 @@ conversation_history = []
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def speak(text: str) -> None:
-    """Convert text to speech and play it."""
+    """Convert text to speech and play it.
+
+    A fresh engine is created per call on purpose: reusing a single pyttsx3
+    engine on Windows (SAPI5) only produces audio on the first runAndWait(),
+    leaving later utterances silent.
+    """
     print(f"\n🤖 Agent: {text}\n")
+    engine = pyttsx3.init()
+    engine.setProperty("rate",   SPEECH_RATE)
+    engine.setProperty("volume", SPEECH_VOLUME)
     engine.say(text)
     engine.runAndWait()
+    engine.stop()
 
 
 def listen(timeout: int = 8, phrase_limit: int = 15) -> str | None:
