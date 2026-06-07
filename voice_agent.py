@@ -1,23 +1,34 @@
 """
 Voice AI Agent
 ==============
-Speak to Claude, get spoken responses back.
+Speak to Groq, get spoken responses back.
 Uses:
   - SpeechRecognition  (mic → text)
   - pyttsx3            (text → speech, offline, no API key)
-  - anthropic          (Claude API)
+  - groq               (Groq API — free tier)
 
 Install:
-    pip install anthropic speechrecognition pyttsx3 pyaudio
+    pip install groq speechrecognition pyttsx3 pyaudio
+
+Set your free Groq API key (https://console.groq.com/keys):
+    export GROQ_API_KEY=...      # macOS / Linux
+    setx GROQ_API_KEY "..."      # Windows
 
 On macOS you may need:  brew install portaudio
 On Linux:               sudo apt install portaudio19-dev python3-pyaudio espeak
 """
 
-import anthropic
+import os
+import sys
+
+import groq
+from groq import Groq
+from dotenv import load_dotenv
 import speech_recognition as sr
 import pyttsx3
-import sys
+
+# Load GROQ_API_KEY (and any other vars) from a local .env file, if present.
+load_dotenv()
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -29,18 +40,25 @@ Speak naturally, like a conversation.
 Do not ask for or repeat back sensitive personal information such as Social Security numbers, bank account details, or passwords.
 """
 
-# Optional: swap for "nova", "alloy", etc. if you use OpenAI TTS instead
+# Groq model — swap for "llama-3.1-8b-instant" (faster) or "openai/gpt-oss-20b", etc.
+MODEL         = "llama-3.3-70b-versatile"
 SPEECH_RATE   = 175   # words per minute (pyttsx3)
 SPEECH_VOLUME = 1.0   # 0.0 – 1.0
 
 # ─── Setup ────────────────────────────────────────────────────────────────────
 
-client     = anthropic.Anthropic()   # reads ANTHROPIC_API_KEY from env
-recognizer = sr.Recognizer()
-engine     = pyttsx3.init()
+if not os.environ.get("GROQ_API_KEY"):
+    print(
+        "GROQ_API_KEY is not set.\n"
+        "Get a free key at https://console.groq.com/keys, then add it to a .env file\n"
+        "in this folder:\n"
+        "    GROQ_API_KEY=your-key-here\n"
+        "(or set it as an environment variable instead)."
+    )
+    sys.exit(1)
 
-engine.setProperty("rate",   SPEECH_RATE)
-engine.setProperty("volume", SPEECH_VOLUME)
+client     = Groq()   # reads GROQ_API_KEY from env
+recognizer = sr.Recognizer()
 
 conversation_history = []
 
@@ -48,10 +66,19 @@ conversation_history = []
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def speak(text: str) -> None:
-    """Convert text to speech and play it."""
+    """Convert text to speech and play it.
+
+    A fresh engine is created per call on purpose: reusing a single pyttsx3
+    engine on Windows (SAPI5) only produces audio on the first runAndWait(),
+    leaving later utterances silent.
+    """
     print(f"\n🤖 Agent: {text}\n")
+    engine = pyttsx3.init()
+    engine.setProperty("rate",   SPEECH_RATE)
+    engine.setProperty("volume", SPEECH_VOLUME)
     engine.say(text)
     engine.runAndWait()
+    engine.stop()
 
 
 def listen(timeout: int = 8, phrase_limit: int = 15) -> str | None:
@@ -86,17 +113,17 @@ def listen(timeout: int = 8, phrase_limit: int = 15) -> str | None:
 
 
 def chat(user_text: str) -> str:
-    """Send user_text to Claude and return the assistant reply."""
+    """Send user_text to Groq and return the assistant reply."""
     conversation_history.append({"role": "user", "content": user_text})
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+    response = client.chat.completions.create(
+        model=MODEL,
         max_tokens=512,
-        system=AGENT_INSTRUCTIONS.strip(),
-        messages=conversation_history,
+        messages=[{"role": "system", "content": AGENT_INSTRUCTIONS.strip()}]
+        + conversation_history,
     )
 
-    reply = response.content[0].text.strip()
+    reply = response.choices[0].message.content.strip()
     conversation_history.append({"role": "assistant", "content": reply})
     return reply
 
@@ -116,7 +143,7 @@ def update_instructions(new_instructions: str) -> None:
 
 def run():
     print("=" * 55)
-    print("  Voice AI Agent  —  powered by Claude")
+    print("  Voice AI Agent  —  powered by Groq")
     print("=" * 55)
     print("  Say 'quit' or 'exit' to stop.")
     print("  Say 'change instructions' to update the agent.")
@@ -165,7 +192,7 @@ def run():
         try:
             reply = chat(user_input)
             speak(reply)
-        except anthropic.APIError as e:
+        except groq.APIError as e:
             print(f"   (API error: {e})")
             speak("Sorry, I had trouble reaching the AI. Please try again.")
 
