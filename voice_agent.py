@@ -91,6 +91,81 @@ TTS_VOICES_BY_LANGUAGE = {
     "zh-tw": "zh-TW-HsiaoChenNeural",
 }
 
+WELCOME_MESSAGES_BY_LANGUAGE = {
+    "ar": (
+        "مرحبا، يمكنني مساعدتك في ترتيب مستندات EBT الخاصة بك. "
+        "يرجى عدم مشاركة أرقام الضمان الاجتماعي أو تفاصيل الحسابات المصرفية "
+        "أو كلمات المرور أو أي معلومات شخصية شديدة الحساسية."
+    ),
+    "de": (
+        "Hallo, ich kann Ihnen helfen, Ihre EBT-Unterlagen zu organisieren. "
+        "Bitte teilen Sie keine Sozialversicherungsnummern, Bankdaten, Passwörter "
+        "oder andere besonders sensiblen persönlichen Informationen."
+    ),
+    "en": (
+        "Hi, I can help you get your EBT documents in order. "
+        "Please do not share Social Security numbers, bank account details, passwords, "
+        "or other highly sensitive information."
+    ),
+    "es": (
+        "Hola, puedo ayudarle a organizar sus documentos de EBT. "
+        "Por favor no comparta números de Seguro Social, detalles de cuentas bancarias, "
+        "contraseñas u otra información personal muy sensible."
+    ),
+    "fr": (
+        "Bonjour, je peux vous aider à organiser vos documents EBT. "
+        "Veuillez ne pas partager de numéros de sécurité sociale, de coordonnées bancaires, "
+        "de mots de passe ou d'autres informations personnelles très sensibles."
+    ),
+    "hi": (
+        "नमस्ते, मैं आपके EBT दस्तावेजों को व्यवस्थित करने में मदद कर सकता हूं। "
+        "कृपया सामाजिक सुरक्षा नंबर, बैंक खाते की जानकारी, पासवर्ड, "
+        "या अन्य अत्यधिक संवेदनशील व्यक्तिगत जानकारी साझा न करें।"
+    ),
+    "it": (
+        "Ciao, posso aiutarti a mettere in ordine i tuoi documenti EBT. "
+        "Per favore non condividere numeri di previdenza sociale, dati bancari, password "
+        "o altre informazioni personali molto sensibili."
+    ),
+    "ja": (
+        "こんにちは。EBTの書類を整理するお手伝いができます。"
+        "社会保障番号、銀行口座情報、パスワード、その他の非常に機密性の高い個人情報は共有しないでください。"
+    ),
+    "ko": (
+        "안녕하세요. EBT 서류를 정리하는 데 도움을 드릴 수 있습니다. "
+        "사회보장번호, 은행 계좌 정보, 비밀번호 또는 기타 매우 민감한 개인 정보를 공유하지 마세요."
+    ),
+    "nl": (
+        "Hallo, ik kan u helpen uw EBT-documenten op orde te krijgen. "
+        "Deel alstublieft geen burgerservicenummers, bankgegevens, wachtwoorden "
+        "of andere zeer gevoelige persoonlijke informatie."
+    ),
+    "pl": (
+        "Cześć, mogę pomóc uporządkować dokumenty EBT. "
+        "Proszę nie podawać numerów ubezpieczenia społecznego, danych kont bankowych, haseł "
+        "ani innych bardzo wrażliwych danych osobowych."
+    ),
+    "pt": (
+        "Olá, posso ajudar você a organizar seus documentos do EBT. "
+        "Por favor, não compartilhe números de Seguro Social, dados bancários, senhas "
+        "ou outras informações pessoais muito sensíveis."
+    ),
+    "ru": (
+        "Здравствуйте, я могу помочь вам привести документы EBT в порядок. "
+        "Пожалуйста, не сообщайте номера социального страхования, банковские данные, пароли "
+        "или другую особо конфиденциальную личную информацию."
+    ),
+    "zh-cn": (
+        "您好，我可以帮助您整理 EBT 文件。"
+        "请不要分享社会安全号码、银行账户信息、密码或其他高度敏感的个人信息。"
+    ),
+    "zh-tw": (
+        "您好，我可以協助您整理 EBT 文件。"
+        "請不要分享社會安全號碼、銀行帳戶資料、密碼或其他高度敏感的個人資訊。"
+    ),
+}
+WELCOME_MESSAGE = WELCOME_MESSAGES_BY_LANGUAGE[DEFAULT_TTS_LANGUAGE]
+
 client = None
 recognizer = sr.Recognizer()
 
@@ -153,15 +228,31 @@ def detect_tts_language(text: str) -> str:
     return language.lower()
 
 
-def choose_tts_voice(language: str) -> str:
-    """Choose an Edge TTS voice for a detected language code."""
+def normalize_tts_language(language: str | None) -> str:
+    """Return a supported language key, falling back to English."""
+    if not language:
+        return DEFAULT_TTS_LANGUAGE
+
     normalized = language.lower()
 
     if normalized in TTS_VOICES_BY_LANGUAGE:
-        return TTS_VOICES_BY_LANGUAGE[normalized]
+        return normalized
 
     base_language = normalized.split("-")[0]
-    return TTS_VOICES_BY_LANGUAGE.get(base_language, DEFAULT_TTS_VOICE)
+    if base_language in TTS_VOICES_BY_LANGUAGE:
+        return base_language
+
+    return DEFAULT_TTS_LANGUAGE
+
+
+def choose_tts_voice(language: str) -> str:
+    """Choose an Edge TTS voice for a detected language code."""
+    return TTS_VOICES_BY_LANGUAGE[normalize_tts_language(language)]
+
+
+def get_welcome_message(language: str | None = None) -> str:
+    """Return the initial assistant message in a supported language."""
+    return WELCOME_MESSAGES_BY_LANGUAGE[normalize_tts_language(language)]
 
 
 async def synthesize_speech_async(text: str) -> bytes | None:
