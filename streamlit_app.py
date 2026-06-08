@@ -2,6 +2,7 @@
 import re
 
 import streamlit as st
+import voice_agent
 
 from localization import (
     CHECKLIST_ITEMS,
@@ -15,7 +16,6 @@ from localization import (
 )
 
 from voice_agent import (
-    analyze_user_message,
     chat,
     detect_tts_language,
     normalize_tts_language,
@@ -465,7 +465,24 @@ def analyze_prompt_once(prompt: str) -> dict:
         return cache[prompt]
 
     try:
-        analysis = analyze_user_message(prompt, CHECKLIST_ITEMS)
+        if hasattr(voice_agent, "analyze_user_message"):
+            analysis = voice_agent.analyze_user_message(prompt, CHECKLIST_ITEMS)
+        else:
+            updates = voice_agent.extract_checklist_updates(prompt, CHECKLIST_ITEMS)
+            classify_language_switch_intent = getattr(
+                voice_agent,
+                "classify_language_switch_intent",
+                None,
+            )
+            language = (
+                classify_language_switch_intent(prompt)
+                if classify_language_switch_intent
+                else None
+            )
+            analysis = {
+                "updates": updates,
+                "language": language,
+            }
     except Exception as e:
         print(f"User message analysis error: {e}")
         analysis = {"updates": {}, "language": None}
