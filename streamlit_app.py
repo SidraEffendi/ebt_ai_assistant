@@ -1,4 +1,5 @@
 ﻿import hashlib
+import re
 
 import streamlit as st
 
@@ -22,6 +23,46 @@ from voice_agent import (
     synthesize_speech,
     transcribe_audio_bytes,
 )
+
+LANGUAGE_NAMES = {
+    "arabic": "ar",
+    "عربي": "ar",
+    "العربية": "ar",
+    "german": "de",
+    "deutsch": "de",
+    "english": "en",
+    "en": "en",
+    "spanish": "es",
+    "espanol": "es",
+    "español": "es",
+    "french": "fr",
+    "francais": "fr",
+    "français": "fr",
+    "hindi": "hi",
+    "हिन्दी": "hi",
+    "हिंदी": "hi",
+    "italian": "it",
+    "italiano": "it",
+    "japanese": "ja",
+    "日本語": "ja",
+    "korean": "ko",
+    "한국어": "ko",
+    "dutch": "nl",
+    "nederlands": "nl",
+    "polish": "pl",
+    "polski": "pl",
+    "portuguese": "pt",
+    "portugues": "pt",
+    "português": "pt",
+    "russian": "ru",
+    "русский": "ru",
+    "chinese": "zh-cn",
+    "simplified chinese": "zh-cn",
+    "mandarin": "zh-cn",
+    "中文": "zh-cn",
+    "traditional chinese": "zh-tw",
+    "繁體中文": "zh-tw",
+}
 
 
 def initialize_state() -> None:
@@ -106,9 +147,41 @@ def checklist_label(item_id: str) -> str:
     return localized_checklist_label(st.session_state.current_language, item_id)
 
 
+def explicit_language_request(text: str) -> str | None:
+    """Detect direct language switch requests without statistical guessing."""
+    normalized = re.sub(r"[^\w\s\u0080-\uffff-]", " ", text.casefold())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if not normalized:
+        return None
+
+    prefixes = (
+        "switch to ",
+        "change to ",
+        "use ",
+        "speak ",
+        "habla ",
+        "cambiar a ",
+        "cambia a ",
+    )
+    candidates = {normalized}
+
+    for prefix in prefixes:
+        if normalized.startswith(prefix):
+            candidates.add(normalized[len(prefix):].strip())
+
+    for candidate in candidates:
+        if candidate in LANGUAGE_NAMES:
+            return LANGUAGE_NAMES[candidate]
+
+    return None
+
+
 def remember_language_from_text(text: str) -> None:
     """Update remembered language without letting weak English detections erase it."""
-    detected_language = normalize_tts_language(detect_tts_language(text))
+    requested_language = explicit_language_request(text)
+    detected_language = normalize_tts_language(
+        requested_language or detect_tts_language(text)
+    )
     current_language = normalize_tts_language(st.session_state.current_language)
 
     if detected_language != DEFAULT_LANGUAGE or current_language == DEFAULT_LANGUAGE:
@@ -295,8 +368,6 @@ def handle_user_prompt(prompt: str) -> None:
         with st.spinner(ui_text("thinking")):
             assistant_reply = chat(prompt, checklist_context())
 
-        remember_language_from_text(assistant_reply)
-
         st.session_state.messages.append(
             {
                 "role": "assistant",
@@ -361,5 +432,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
