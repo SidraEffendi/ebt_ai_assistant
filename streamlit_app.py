@@ -557,7 +557,8 @@ def checklist_context() -> str:
     return (
         f"Current response language: {response_language}. "
         "Always answer using that language's normal native writing system. "
-        "Current document checklist. "
+        "Current document checklist. This snapshot is the source of truth; "
+        "ignore earlier conversation if it conflicts. "
         f"Fulfilled: {fulfilled_text}. "
         f"Not fulfilled: {missing_text}."
     )

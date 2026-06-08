@@ -404,20 +404,32 @@ def chat(user_text: str, checklist_context: str | None = None) -> str:
     """Send user_text to Groq and return the assistant reply."""
     groq_client = get_client()
 
-    conversation_history.append({"role": "user", "content": user_text})
-
     system_content = AGENT_INSTRUCTIONS.strip()
+
+    messages = [{"role": "system", "content": system_content}]
+    messages.extend(conversation_history)
     if checklist_context:
-        system_content = f"{system_content}\n\n{checklist_context}"
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Use this current checklist snapshot as the authoritative "
+                    "state for the next reply, even if earlier conversation "
+                    "turns conflict with it:\n"
+                    f"{checklist_context}"
+                ),
+            }
+        )
+    messages.append({"role": "user", "content": user_text})
 
     response = groq_client.chat.completions.create(
         model=MODEL,
         max_tokens=512,
-        messages=[{"role": "system", "content": system_content}]
-        + conversation_history,
+        messages=messages,
     )
 
     reply = response.choices[0].message.content.strip()
+    conversation_history.append({"role": "user", "content": user_text})
     conversation_history.append({"role": "assistant", "content": reply})
     return reply
 
