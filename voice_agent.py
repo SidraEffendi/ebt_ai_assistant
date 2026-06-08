@@ -104,15 +104,23 @@ recognizer = sr.Recognizer()
 conversation_history = []
 
 
-CHECKLIST_EXTRACTION_INSTRUCTIONS = """
-You update an EBT document checklist from one user message.
-The user may write in any language.
-Return only a JSON object with an "updates" object.
+USER_MESSAGE_ANALYSIS_INSTRUCTIONS = """
+Analyze one user message for low-level app state updates.
+Return only a JSON object with this shape:
+{"updates": {}, "language": null}
+
+Checklist rules:
+Use the "updates" object for EBT checklist item updates.
 Use checklist item ids as keys and true or false as values.
 Use true only when the user clearly says they have, collected, uploaded, or completed that item.
 Use false only when the user clearly says they do not have, lost, still need, or have not completed that item.
-If the message is only asking a question or is unclear, return {"updates":{}}.
+If the message is only asking a question or is unclear, use "updates": {}.
 Do not infer unrelated checklist items.
+
+Language switch rules:
+Set "language" to one supported language code only when the user intends to switch the assistant or interface response language.
+Supported language codes: ar, de, en, es, fr, hi, it, ja, ko, nl, pl, pt, ru, zh-cn, zh-tw.
+Use null when the user is only mentioning, asking about, comparing, translating, or discussing a language without asking to switch.
 """
 
 
@@ -307,11 +315,26 @@ def transcribe_audio_bytes(
         return None
 
 
-def extract_checklist_updates(
+def _parse_json_object(content: str) -> dict:
+    """Parse a JSON object from model output, tolerating accidental framing text."""
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start == -1 or end == 0:
+            return {}
+        try:
+            return json.loads(content[start:end])
+        except json.JSONDecodeError:
+            return {}
+
+
+def analyze_user_message(
     user_text: str,
     checklist_items: list[dict[str, str]],
-) -> dict[str, bool]:
-    """Ask the model for explicit checklist updates from the user's message."""
+) -> dict:
+    """Analyze user text for checklist updates and optional language switch intent."""
     groq_client = get_client()
 
     checklist_description = "\n".join(
@@ -321,12 +344,12 @@ def extract_checklist_updates(
 
     response = groq_client.chat.completions.create(
         model=MODEL,
-        max_tokens=128,
+        max_tokens=160,
         temperature=0,
         messages=[
             {
                 "role": "system",
-                "content": CHECKLIST_EXTRACTION_INSTRUCTIONS.strip(),
+                "content": USER_MESSAGE_ANALYSIS_INSTRUCTIONS.strip(),
             },
             {
                 "role": "user",
@@ -341,27 +364,40 @@ def extract_checklist_updates(
     )
 
     content = response.choices[0].message.content.strip()
-
-    try:
-        payload = json.loads(content)
-    except json.JSONDecodeError:
-        start = content.find("{")
-        end = content.rfind("}") + 1
-        if start == -1 or end == 0:
-            return {}
-        try:
-            payload = json.loads(content[start:end])
-        except json.JSONDecodeError:
-            return {}
+    payload = _parse_json_object(content)
 
     updates = payload.get("updates", {})
     valid_ids = {item["id"] for item in checklist_items}
-
-    return {
+    valid_updates = {
         item_id: checked
         for item_id, checked in updates.items()
         if item_id in valid_ids and isinstance(checked, bool)
     }
+
+    language = payload.get("language")
+    valid_language = None
+    if isinstance(language, str):
+        normalized_language = normalize_tts_language(language)
+        if normalized_language != DEFAULT_TTS_LANGUAGE or language.lower() == DEFAULT_TTS_LANGUAGE:
+            valid_language = normalized_language
+
+    return {
+        "updates": valid_updates,
+        "language": valid_language,
+    }
+
+
+def extract_checklist_updates(
+    user_text: str,
+    checklist_items: list[dict[str, str]],
+) -> dict[str, bool]:
+    """Ask the model for explicit checklist updates from the user's message."""
+    return analyze_user_message(user_text, checklist_items)["updates"]
+
+
+def classify_language_switch_intent(user_text: str) -> str | None:
+    """Ask the model whether an ambiguous prompt intends a language switch."""
+    return analyze_user_message(user_text, [])["language"]
 
 
 def chat(user_text: str, checklist_context: str | None = None) -> str:
