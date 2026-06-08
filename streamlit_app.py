@@ -49,15 +49,13 @@ def initialize_state() -> None:
     if "reset_generation" not in st.session_state:
         st.session_state.reset_generation = 0
 
+    if "checklist_generation" not in st.session_state:
+        st.session_state.checklist_generation = 0
+
     if "checklist" not in st.session_state:
         st.session_state.checklist = {
             item["id"]: False for item in CHECKLIST_ITEMS
         }
-
-    for item in CHECKLIST_ITEMS:
-        widget_key = checklist_widget_key(item["id"])
-        if widget_key not in st.session_state:
-            st.session_state[widget_key] = st.session_state.checklist[item["id"]]
 
 
 def reset_app() -> None:
@@ -73,16 +71,19 @@ def reset_app() -> None:
     st.session_state.last_audio_hash = None
     st.session_state.welcome_audio_played = False
     st.session_state.reset_generation += 1
+    st.session_state.checklist_generation += 1
     st.session_state.checklist = {
         item["id"]: False for item in CHECKLIST_ITEMS
     }
-    for item in CHECKLIST_ITEMS:
-        st.session_state[checklist_widget_key(item["id"])] = False
 
 
 def checklist_widget_key(item_id: str) -> str:
     """Return the Streamlit widget key for a checklist item."""
-    return f"checklist_{item_id}"
+    return (
+        f"checklist_{item_id}_"
+        f"{st.session_state.reset_generation}_"
+        f"{st.session_state.checklist_generation}"
+    )
 
 
 def current_ui_language() -> str:
@@ -124,9 +125,8 @@ def welcome_message(language: str) -> dict[str, str | bool]:
 
 
 def set_checklist_item(item_id: str, checked: bool) -> None:
-    """Update checklist state and keep its checkbox widget in sync."""
+    """Update checklist state from extracted user claims."""
     st.session_state.checklist[item_id] = checked
-    st.session_state[checklist_widget_key(item_id)] = checked
 
 
 def update_checklist_from_text(text: str) -> None:
@@ -137,8 +137,13 @@ def update_checklist_from_text(text: str) -> None:
         print(f"Checklist extraction error: {e}")
         return
 
+    if not updates:
+        return
+
     for item_id, checked in updates.items():
         set_checklist_item(item_id, checked)
+
+    st.session_state.checklist_generation += 1
 
 
 def checklist_context() -> str:
@@ -184,7 +189,11 @@ def render_sidebar() -> None:
 
         for item in CHECKLIST_ITEMS:
             widget_key = checklist_widget_key(item["id"])
-            st.checkbox(checklist_label(item["id"]), key=widget_key)
+            st.checkbox(
+                checklist_label(item["id"]),
+                value=st.session_state.checklist[item["id"]],
+                key=widget_key,
+            )
             st.session_state.checklist[item["id"]] = st.session_state[widget_key]
 
         st.divider()
@@ -233,6 +242,7 @@ def render_voice_input() -> None:
     if transcript:
         st.success(ui_text("you_said").format(transcript=transcript))
         st.session_state.pending_prompt = transcript
+        st.rerun()
     else:
         st.warning(ui_text("transcription_failed"))
 
@@ -250,6 +260,7 @@ def render_suggested_questions() -> None:
                 key=f"suggested_{current_ui_language()}_{index}_{st.session_state.reset_generation}",
             ):
                 st.session_state.pending_prompt = question
+                st.rerun()
 
 
 def render_chat_history() -> None:
@@ -264,6 +275,12 @@ def render_chat_history() -> None:
             ):
                 render_spoken_response(message["content"])
                 st.session_state.welcome_audio_played = True
+            elif (
+                message.get("auto_speak")
+                and st.session_state.auto_read_responses
+            ):
+                render_spoken_response(message["content"])
+                message["auto_speak"] = False
 
 
 def handle_user_prompt(prompt: str) -> None:
@@ -274,42 +291,33 @@ def handle_user_prompt(prompt: str) -> None:
 
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    with st.chat_message("user"):
-        st.write(prompt)
+    try:
+        with st.spinner(ui_text("thinking")):
+            assistant_reply = chat(prompt, checklist_context())
 
-    with st.chat_message("assistant"):
-        try:
-            with st.spinner(ui_text("thinking")):
-                assistant_reply = chat(prompt, checklist_context())
+        remember_language_from_text(assistant_reply)
 
-            st.write(assistant_reply)
-            remember_language_from_text(assistant_reply)
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": assistant_reply,
+                "auto_speak": True,
+            }
+        )
 
-            st.session_state.messages.append(
-                {"role": "assistant", "content": assistant_reply}
-            )
+    except RuntimeError as e:
+        error_message = str(e)
+        st.session_state.messages.append(
+            {"role": "assistant", "content": error_message}
+        )
 
-            if st.session_state.auto_read_responses:
-                render_spoken_response(assistant_reply)
+    except Exception as e:
+        print(f"Frontend chat error: {e}")
 
-        except RuntimeError as e:
-            error_message = str(e)
-            st.error(error_message)
-
-            st.session_state.messages.append(
-                {"role": "assistant", "content": error_message}
-            )
-
-        except Exception as e:
-            print(f"Frontend chat error: {e}")
-
-            error_message = ui_text("service_error")
-
-            st.error(error_message)
-
-            st.session_state.messages.append(
-                {"role": "assistant", "content": error_message}
-            )
+        error_message = ui_text("service_error")
+        st.session_state.messages.append(
+            {"role": "assistant", "content": error_message}
+        )
 
 
 def main() -> None:
@@ -320,6 +328,19 @@ def main() -> None:
     )
 
     initialize_state()
+
+    typed_prompt = st.chat_input(
+        ui_text("chat_input"),
+        key=f"chat_input_{st.session_state.reset_generation}",
+    )
+
+    prompt = st.session_state.pending_prompt or typed_prompt
+
+    if prompt:
+        st.session_state.pending_prompt = None
+        handle_user_prompt(prompt)
+        st.rerun()
+
     render_sidebar()
 
     st.title(ui_text("page_title"))
@@ -336,17 +357,6 @@ def main() -> None:
     st.divider()
 
     render_chat_history()
-
-    typed_prompt = st.chat_input(
-        ui_text("chat_input"),
-        key=f"chat_input_{st.session_state.reset_generation}",
-    )
-
-    prompt = st.session_state.pending_prompt or typed_prompt
-
-    if prompt:
-        st.session_state.pending_prompt = None
-        handle_user_prompt(prompt)
 
 
 if __name__ == "__main__":
