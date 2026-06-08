@@ -1,5 +1,3 @@
-﻿from voice_agent import normalize_tts_language
-
 DEFAULT_LANGUAGE = "en"
 
 UI_TEXT_BY_LANGUAGE = {
@@ -681,9 +679,17 @@ def get_welcome_message(language: str | None = None) -> str:
 
 def ui_language(language: str | None) -> str:
     """Return the supported UI language, using English as the fallback."""
-    normalized = normalize_tts_language(language)
+    if not language:
+        return DEFAULT_LANGUAGE
+
+    normalized = language.lower()
     if normalized in UI_TEXT_BY_LANGUAGE:
         return normalized
+
+    base_language = normalized.split("-")[0]
+    if base_language in UI_TEXT_BY_LANGUAGE:
+        return base_language
+
     return DEFAULT_LANGUAGE
 
 
@@ -710,4 +716,46 @@ def checklist_label(language: str | None, item_id: str) -> str:
         ui_language(language),
         CHECKLIST_LABELS_BY_LANGUAGE[DEFAULT_LANGUAGE],
     ).get(item_id, CHECKLIST_LABELS_BY_LANGUAGE[DEFAULT_LANGUAGE][item_id])
+
+
+def validate_localizations() -> None:
+    """Validate that English fallback copy exists and all locales stay complete."""
+    tables = {
+        "UI_TEXT_BY_LANGUAGE": UI_TEXT_BY_LANGUAGE,
+        "SUGGESTED_QUESTIONS_BY_LANGUAGE": SUGGESTED_QUESTIONS_BY_LANGUAGE,
+        "CHECKLIST_LABELS_BY_LANGUAGE": CHECKLIST_LABELS_BY_LANGUAGE,
+        "WELCOME_MESSAGES_BY_LANGUAGE": WELCOME_MESSAGES_BY_LANGUAGE,
+    }
+
+    for table_name, table in tables.items():
+        if DEFAULT_LANGUAGE not in table:
+            raise RuntimeError(f"{table_name} is missing the English fallback entry.")
+
+    english_ui_keys = set(UI_TEXT_BY_LANGUAGE[DEFAULT_LANGUAGE])
+    for language, entries in UI_TEXT_BY_LANGUAGE.items():
+        missing = english_ui_keys - set(entries)
+        if missing:
+            raise RuntimeError(
+                f"UI_TEXT_BY_LANGUAGE[{language!r}] is missing keys: {sorted(missing)}"
+            )
+
+    english_checklist_keys = {
+        item["id"]
+        for item in CHECKLIST_ITEMS
+    }
+    for language, labels in CHECKLIST_LABELS_BY_LANGUAGE.items():
+        missing = english_checklist_keys - set(labels)
+        if missing:
+            raise RuntimeError(
+                f"CHECKLIST_LABELS_BY_LANGUAGE[{language!r}] is missing keys: {sorted(missing)}"
+            )
+
+    if not SUGGESTED_QUESTIONS_BY_LANGUAGE[DEFAULT_LANGUAGE]:
+        raise RuntimeError("SUGGESTED_QUESTIONS_BY_LANGUAGE['en'] cannot be empty.")
+
+    if not WELCOME_MESSAGES_BY_LANGUAGE[DEFAULT_LANGUAGE].strip():
+        raise RuntimeError("WELCOME_MESSAGES_BY_LANGUAGE['en'] cannot be empty.")
+
+
+validate_localizations()
 

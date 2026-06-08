@@ -64,6 +64,24 @@ LANGUAGE_NAMES = {
     "繁體中文": "zh-tw",
 }
 
+RESPONSE_LANGUAGE_NAMES = {
+    "ar": "Arabic",
+    "de": "German",
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "hi": "Hindi",
+    "it": "Italian",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "ru": "Russian",
+    "zh-cn": "Simplified Chinese",
+    "zh-tw": "Traditional Chinese",
+}
+
 
 def initialize_state() -> None:
     """Initialize Streamlit session state."""
@@ -221,6 +239,11 @@ def update_checklist_from_text(text: str) -> None:
 
 def checklist_context() -> str:
     """Build a compact checklist summary for the assistant prompt."""
+    current_language = current_ui_language()
+    response_language = RESPONSE_LANGUAGE_NAMES.get(
+        current_language,
+        RESPONSE_LANGUAGE_NAMES[DEFAULT_LANGUAGE],
+    )
     fulfilled = [
         item["label"]
         for item in CHECKLIST_ITEMS
@@ -236,6 +259,8 @@ def checklist_context() -> str:
     missing_text = ", ".join(missing) if missing else "none"
 
     return (
+        f"Current response language: {response_language}. "
+        "Always answer using that language's normal native writing system. "
         "Current document checklist. "
         f"Fulfilled: {fulfilled_text}. "
         f"Not fulfilled: {missing_text}."
