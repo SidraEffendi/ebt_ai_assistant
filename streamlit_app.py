@@ -505,6 +505,19 @@ def set_checklist_item(item_id: str, checked: bool) -> None:
     st.session_state.checklist[item_id] = checked
 
 
+def sync_checklist_item_from_widget(item_id: str) -> None:
+    """Update checklist state after a manual checkbox change."""
+    widget_key = checklist_widget_key(item_id)
+    if widget_key in st.session_state:
+        set_checklist_item(item_id, bool(st.session_state[widget_key]))
+
+
+def sync_checklist_from_widgets() -> None:
+    """Copy any rendered checkbox values into checklist state."""
+    for item in CHECKLIST_ITEMS:
+        sync_checklist_item_from_widget(item["id"])
+
+
 def update_checklist_from_analysis(analysis: dict | None) -> None:
     """Check or uncheck checklist items from model-extracted user claims."""
     if not analysis:
@@ -574,8 +587,9 @@ def render_sidebar() -> None:
                 checklist_label(item["id"]),
                 value=st.session_state.checklist[item["id"]],
                 key=widget_key,
+                on_change=sync_checklist_item_from_widget,
+                args=(item["id"],),
             )
-            st.session_state.checklist[item["id"]] = st.session_state[widget_key]
 
         st.divider()
 
@@ -716,6 +730,7 @@ def main() -> None:
     )
 
     initialize_state()
+    sync_checklist_from_widgets()
 
     typed_prompt = st.chat_input(
         ui_text("chat_input"),
